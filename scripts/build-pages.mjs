@@ -66,12 +66,15 @@ export async function buildPages(projectRoot, { revision, output = '.pages' }) {
 <title>Antom Builder plugin</title>
 <style>body{max-width:760px;margin:48px auto;padding:0 20px;font:16px/1.6 system-ui;color:#252525}code{overflow-wrap:anywhere}a{color:#2359bd}</style>
 <h1>Antom Builder plugin</h1>
-<p>Add this URL to your Builder Space plugin settings:</p>
+<p>Your Builder Space needs the appropriate custom/private-plugin entitlement to load this external URL. Builder currently documents private plugins for Enterprise plans. See <a href="https://www.builder.io/c/docs/private-plugins-setup/">private plugin setup</a> and <a href="https://www.builder.io/c/docs/plugin-support/">plugin support</a>.</p>
+<p>Add this URL to your Builder Space plugin settings, save and reload Builder:</p>
 <p><code>${pluginUrl}</code></p>
-<p>Select <strong>GitHub (no npm)</strong> in the Antom tab. Copy the setup request into a clean target project's Agent chat. It requests complete file import using permitted native tools, not an executable installer.</p>
+<p>In the Antom tab, choose payment integration, bill analysis or both, review any payment settings, then select <strong>Copy setup request</strong>. Paste it into the connected project's Builder Agent chat, review the complete import results, then start a new chat to use the Skills.</p>
+<p>The request imports pinned files through permitted native Agent tools. The browser panel cannot write project files or verify the remote installation.</p>
 <p>This deployment verifies the distribution source only. Builder cloud import, destination hashes, Skill discovery and business functionality require separate acceptance. Stop on unavailable or denied tools, truncated files or conflicts. Do not change command restrictions.</p>
 <p>Old builds are not retained by this site. Reload the current plugin if its pinned manifest is unavailable; never silently substitute another revision.</p>
 <p>Secrets stay on your server. Notification interfaces always use RSA. No npm package is published by this workflow.</p>
+<p>A public GitHub repository is not an approved Builder public plugin. Public listing requires submission to Builder and Builder review.</p>
 <p>Build <code>${revision}</code> · <a href="https://github.com/${GITHUB_REPOSITORY}">Source and instructions</a> · <a href="release.json">Release metadata</a> · <a href="LICENSE">License</a></p></html>\n`));
   const destination = path.join(projectRoot, output);
   try {

@@ -229,76 +229,37 @@ function plainText(markup) {
     .trim();
 }
 
-test('main panel offers two cloud setup cards and keeps local alternatives collapsed', async () => {
-  const { registrations } = executeBundle(await readFile(bundlePath, 'utf8'));
+test('main panel and built-in help offer only the native file-import setup flow', async () => {
+  const bundle = await readFile(bundlePath, 'utf8');
+  const { registrations } = executeBundle(bundle);
   const component = registrations.find(([type]) => type === 'editor.editTab')[1].component;
   const markup = ReactDOMServer.renderToStaticMarkup(React.createElement(component));
+  const visible = plainText(markup);
   assert.deepEqual(
     Array.from(markup.matchAll(/data-testid="([^"]+)"/g), ([, id]) => id),
-    ['setup-in-builder', 'setup-package-status', 'start-chat', 'local-development']
+    ['setup-in-builder', 'setup-package-status', 'start-chat']
   );
   assert.equal((markup.match(/\bMuiCard-root\b/g) || []).length, 2);
-
-  const disclosures = Array.from(markup.matchAll(/<details\b([^>]*)>([\s\S]*?)<\/details>/g));
-  assert.equal(disclosures.length, 1);
-  assert.equal((markup.match(/<details\b/g) || []).length, 1, 'local instructions use one disclosure');
-  for (const [, attributes] of disclosures) {
-    assert.doesNotMatch(attributes, /\bopen(?:\s|=|$)/, 'instructions must be collapsed initially');
-  }
-  assert.deepEqual(disclosures.map(([, , content]) => {
-    const summary = content.match(/<summary\b[^>]*>([\s\S]*?)<\/summary>/);
-    assert.ok(summary, 'native disclosure needs a visible, keyboard-accessible summary');
-    return plainText(summary[1]);
-  }), ['Local development (optional)']);
-
-  const installDetails = plainText(disclosures[0][2]);
-  assert.match(installDetails, /npm exec/);
-  assert.match(installDetails, /antom-builder install/);
-  assert.match(installDetails, /antom-builder check/);
-  assert.match(installDetails, /Download Skill ZIP/);
-  assert.match(installDetails, /\.builder\/skills/);
-  assert.match(installDetails, /Client ID:/);
-  assert.match(installDetails, /Gateway:/);
-  assert.match(installDetails, /antom-builder config/);
-  assert.match(installDetails, /Copy config command/);
-  assert.match(installDetails, /Copy install command/);
-  assert.match(installDetails, /Download config/);
-  assert.match(installDetails, /Refreshing…|Refresh settings/);
-  assert.match(installDetails, /\.env\.example/);
-
-  // Model the native <details> initial visibility; SSR still contains its hidden body.
-  const visible = plainText(markup.replace(/<details\b[^>]*>([\s\S]*?)<\/details>/g, (_, content) =>
-    content.match(/<summary\b[^>]*>[\s\S]*?<\/summary>/)[0]
-  ));
+  assert.doesNotMatch(markup, /<details\b|<select\b/);
   for (const label of [
-    '1. Setup in Builder', '2. Start a chat',
-    'Copy setup request', 'Copy example', 'Edit settings',
-    'Secrets stay on your server; notify always uses RSA.', 'Usage guide',
-  ]) {
-    assert.ok(visible.includes(label), `${label} should remain visible`);
+    '1. Setup in Builder', '2. Start a chat', 'Copy setup request', 'Copy example',
+    'Edit settings', 'Secrets stay on your server; notify always uses RSA.', 'Usage guide',
+  ]) assert.ok(visible.includes(label), `${label} should remain visible`);
+  assert.match(visible, /Imports complete files with Agent tools\./);
+  assert.match(visible, /Paste in Builder Agent/);
+  assert.match(visible, /After the Agent confirms setup, start a new Builder chat\./);
+  assert.match(visible, /Checking source manifest…/);
+  for (const content of [markup, bundle]) {
+    assert.doesNotMatch(content, /Installer source|Public npm|Project test package|Legacy installers|Local development \(optional\)|Download Skill ZIP|Download config|Copy install command|Copy config command|Copy check command|Antom CLI guide/);
   }
-  assert.doesNotMatch(visible, /npm exec|Download Skill ZIP|Copy install command|Download config|Copy config command|Antom CLI guide|Client ID:|Gateway:/);
-  assert.doesNotMatch(markup, /data-testid="(?:install-skills|payment-configuration)"/);
-  assert.doesNotMatch(markup, /Antom CLI \(optional\)|Verify the actual payment flow/);
-  assert.doesNotMatch(visible, /Install once in each project, then use Antom Skills in chat/);
-  assert.match(markup, /<a\b[^>]*href="https:\/\/docs\.antom\.com\/ac\/ref\/antom_cli"[^>]*>Antom CLI guide<\/a>/);
+  assert.match(bundle, /click Copy setup request, then paste it in the current Builder Agent chat/);
+  assert.match(bundle, /Copying a request does not install Skills/);
+  assert.match(bundle, /verifies every selected file before copying the request/);
   const buttons = Array.from(markup.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g));
   const setupButton = buttons.find(([, , content]) => plainText(content) === 'Copy setup request');
-  assert.ok(setupButton, 'cloud setup must be the primary action');
+  assert.ok(setupButton);
   assert.match(setupButton[1], /\bdisabled(?:=""|="disabled")?(?:\s|$)/,
-    'setup stays disabled until the GitHub source and saved settings have been checked');
-  const sourceSelect = markup.match(/<select\b[^>]*aria-label="Installer source"[^>]*>([\s\S]*?)<\/select>/);
-  assert.ok(sourceSelect, 'development installation requires an explicit source selection');
-  assertSelected(sourceSelect[0], 'github');
-  assert.match(sourceSelect[1], /<option\b[^>]*value="github"[^>]*>GitHub \(no npm\)<\/option>/);
-  assert.match(sourceSelect[1], /<option\b[^>]*value="npm"[^>]*>Public npm<\/option>/);
-  assert.match(sourceSelect[1], /<option value="project">Project test package<\/option>/);
-  assert.doesNotMatch(visible, /Uses tools\/antom-builder/, 'GitHub does not require a preloaded installer');
-  assert.match(visible, /Imports complete files with Agent tools\. No install commands\./);
-  assert.ok(buttons.some(([, , content]) => plainText(content) === 'Usage guide'),
-    'Usage guide opens built-in help as a button');
-  assert.doesNotMatch(markup, /<a\b[^>]*>[\s]*Usage guide<\/a>/);
-  assert.doesNotMatch(markup, /github\.com[^"\s]*#use-the-plugin/);
+    'setup stays disabled until the source manifest and saved settings have been checked');
 });
 
 // Exercise the production panel's actual event handlers with a small hook
@@ -308,12 +269,15 @@ function panelHandlerFixture(bundle, writeText, { fetch: fetchFunction = githubF
   let cursor = 0;
   let effects = [];
   let tree;
+  let disposed = false;
+  let updatesAfterUnmount = 0;
   const react = {
     ...React,
     useState(initial) {
       const index = cursor++;
       if (!slots[index]) slots[index] = { value: typeof initial === 'function' ? initial() : initial };
       return [slots[index].value, (value) => {
+        if (disposed) updatesAfterUnmount += 1;
         slots[index].value = typeof value === 'function' ? value(slots[index].value) : value;
       }];
     },
@@ -363,7 +327,10 @@ function panelHandlerFixture(bundle, writeText, { fetch: fetchFunction = githubF
     ...fixture,
     render,
     find,
-    source: () => find((props) => props['aria-label'] === 'Installer source'),
+    skill: (id) => find((props) => props.type === 'checkbox' && props.value === id),
+    button: (label) => find((props) => typeof props.onClick === 'function' && props.children === label),
+    manualRequest: () => find((props) => props['aria-label'] === 'Setup request to copy manually'),
+    updatesAfterUnmount: () => updatesAfterUnmount,
     setup: () => find((props) => typeof props.onClick === 'function' &&
       ['Copy setup request', 'Preparing request…', 'Request copied'].includes(props.children)),
     async settle() {
@@ -374,151 +341,128 @@ function panelHandlerFixture(bundle, writeText, { fetch: fetchFunction = githubF
     },
     cleanup() {
       for (const slot of slots) slot?.cleanup?.();
+      disposed = true;
     },
   };
 }
 
-test('GitHub is the default source, verifies before copy, and makes no npm requests', async (t) => {
-  const requests = [];
-  const copied = [];
-  const panel = panelHandlerFixture(await readFile(bundlePath, 'utf8'), async (text) => copied.push(text), {
-    fetch: async (url, options) => {
-      requests.push(String(url));
-      return githubFixtureFetch(url, options);
-    },
-  });
-  t.after(() => panel.cleanup());
-  await panel.settle();
-  assert.equal(panel.source().value, 'github');
-  assert.equal(panel.setup().disabled, false);
-  assert.ok(panel.find((props) => props.children === 'Source manifest verified; project installation is not verified.'));
-  await panel.setup().onClick();
-  panel.render();
-  assert.equal(copied.length, 1);
-  assert.match(copied[0], /\.builder\/skills\/antom-integration/);
-  assert.ok(requests.length >= 6, 'copy checks all five integration files, not only the manifest');
-  assert.ok(requests.every((url) => url.startsWith(githubSource.baseUrl)));
-  assert.ok(requests.every((url) => !url.includes('registry.npmjs.org')));
-  assert.equal(panel.setup().children, 'Request copied');
-  const staleGithubCopy = panel.setup().onClick;
-  panel.source().onChange({ target: { value: 'npm' } });
-  await staleGithubCopy();
-  assert.equal(copied.length, 1, 'a stale handler cannot reuse GitHub verification for npm');
-  await panel.settle();
-  panel.source().onChange({ target: { value: 'project' } });
-  panel.render();
-  assert.equal(panel.setup().children, 'Copy setup request', 'source change clears the old copied state');
-});
-
-test('unavailable GitHub source disables copy without falling back to npm', async (t) => {
+test('initial status checks only the manifest and copy verifies every selected source file', async (t) => {
   const requests = [];
   const copied = [];
   const panel = panelHandlerFixture(await readFile(bundlePath, 'utf8'), async (text) => copied.push(text), {
     fetch: async (url) => {
       requests.push(String(url));
-      return new Response('', { status: 404 });
+      return githubFixtureFetch(url);
     },
   });
   t.after(() => panel.cleanup());
   await panel.settle();
-  assert.equal(panel.source().value, 'github');
+  assert.equal(panel.find((props) => props['aria-label'] === 'Installer source'), null);
+  assert.deepEqual(requests, [githubSource.baseUrl + 'manifest.json']);
+  assert.equal(panel.setup().disabled, false);
+  assert.ok(panel.find((props) => props.children === 'Source manifest verified; project installation is not verified.'));
+  panel.skill('reconciliation').onChange();
+  panel.render();
+  await panel.setup().onClick();
+  panel.render();
+  assert.equal(copied.length, 1);
+  assert.match(copied[0], /\.builder\/skills\/antom-integration/);
+  assert.match(copied[0], /\.builder\/skills\/antom-reconciliation-expert/);
+  assert.equal(requests[1], githubSource.baseUrl + 'manifest.json');
+  assert.deepEqual(requests.slice(2).sort(), githubSource.manifest.skills.flatMap((skill) => skill.files.map((file) => file.url)).sort());
+  assert.ok(requests.every((url) => url.startsWith(githubSource.baseUrl)));
+  assert.equal(panel.setup().children, 'Request copied');
+});
+
+test('unavailable source blocks clipboard until its Retry succeeds', async (t) => {
+  const requests = [];
+  const copied = [];
+  let available = false;
+  const panel = panelHandlerFixture(await readFile(bundlePath, 'utf8'), async (text) => copied.push(text), {
+    fetch: async (url) => {
+      requests.push(String(url));
+      return available ? githubFixtureFetch(url) : new Response('', { status: 404 });
+    },
+  });
+  t.after(() => panel.cleanup());
+  await panel.settle();
   assert.equal(panel.setup().disabled, true);
   await panel.setup().onClick();
   assert.deepEqual(copied, []);
-  assert.ok(panel.find((props) => props['data-testid'] === 'setup-package-status'));
-  assert.ok(requests.length > 0);
+  assert.equal(panel.manualRequest(), null);
+  assert.ok(panel.button('Retry'));
+  available = true;
+  await panel.button('Retry').onClick();
+  panel.render();
+  assert.equal(panel.setup().disabled, false);
+  await panel.setup().onClick();
+  assert.equal(copied.length, 1);
   assert.ok(requests.every((url) => url.startsWith(githubSource.baseUrl)));
 });
 
-test('GitHub asset verification failure never copies an installation request', async (t) => {
+test('asset verification failure blocks copy and manual fallback, then supports Retry', async (t) => {
   const copied = [];
+  let corrupt = true;
   const panel = panelHandlerFixture(await readFile(bundlePath, 'utf8'), async (text) => copied.push(text), {
-    fetch: async (url) => String(url).endsWith('/manifest.json')
+    fetch: async (url) => !corrupt || String(url).endsWith('/manifest.json')
       ? githubFixtureFetch(url)
       : new Response('corrupt source fixture', { headers: { 'content-type': 'text/plain' } }),
   });
   t.after(() => panel.cleanup());
   await panel.settle();
   assert.equal(panel.setup().disabled, false, 'manifest availability does not promise valid file assets');
-  await panel.setup().onClick();
+  const staleCopy = panel.setup().onClick;
+  await staleCopy();
   panel.render();
   assert.deepEqual(copied, []);
-  assert.equal(panel.find((props) => props['aria-label'] === 'Setup request to copy manually'), null);
-  assert.equal(panel.setup().children, 'Copy setup request');
-});
-
-test('source switches abort availability checks and ignore stale GitHub success', async (t) => {
-  let releaseGithub;
-  let githubSignal;
-  const pendingGithub = new Promise((resolve) => { releaseGithub = resolve; });
-  const panel = panelHandlerFixture(await readFile(bundlePath, 'utf8'), async () => {}, {
-    fetch: async (url, options) => {
-      if (String(url).startsWith(githubSource.baseUrl)) {
-        githubSignal = options.signal;
-        await pendingGithub;
-        return githubFixtureFetch(url);
-      }
-      return new Response('', { status: 404 });
-    },
-  });
-  t.after(() => { releaseGithub(); panel.cleanup(); });
-  await panel.settle();
+  assert.equal(panel.manualRequest(), null);
   assert.equal(panel.setup().disabled, true);
-  assert.ok(githubSignal);
-  panel.source().onChange({ target: { value: 'npm' } });
-  await panel.settle();
-  assert.equal(githubSignal.aborted, true);
-  assert.equal(panel.source().value, 'npm');
-  releaseGithub();
-  await panel.settle();
-  assert.equal(panel.setup().disabled, true);
-  assert.ok(panel.find((props) => typeof props.children === 'string' && props.children.includes('not published on npm')));
-  assert.equal(panel.find((props) => props.children === 'Source manifest verified; project installation is not verified.'), null);
-});
-
-test('project setup is explicit, independent of npm, and clears copied or fallback requests on source changes', async (t) => {
-  const copied = [];
-  let clipboardFails = false;
-  const panel = panelHandlerFixture(await readFile(bundlePath, 'utf8'), async (text) => {
-    if (clipboardFails) throw new Error('fixture clipboard failure');
-    copied.push(text);
-  });
-  t.after(() => panel.cleanup());
-  await panel.settle();
-  assert.equal(panel.source().value, 'github');
-  panel.source().onChange({ target: { value: 'npm' } });
-  await panel.settle();
-  assert.equal(panel.setup().disabled, true, 'npm 404 cannot enable the public flow');
-  assert.ok(panel.find((props) => props['data-testid'] === 'setup-package-status'));
-  panel.source().onChange({ target: { value: 'project' } });
+  await staleCopy();
+  assert.deepEqual(copied, [], 'stale handlers cannot reuse a failed availability check');
+  corrupt = false;
+  await panel.button('Retry').onClick();
   panel.render();
-  assert.equal(panel.setup().disabled, false);
-  assert.equal(panel.find((props) => props['data-testid'] === 'setup-package-status'), null);
-  assert.ok(panel.find((props) => typeof props.children === 'string' &&
-    props.children.includes('Uses tools/antom-builder. Project command approval is required')));
   await panel.setup().onClick();
-  panel.render();
   assert.equal(copied.length, 1);
-  assert.match(copied[0], /tools\/antom-builder/);
-  assert.doesNotMatch(copied[0], /npm exec/);
-  assert.equal(panel.setup().children, 'Request copied');
-
-  panel.source().onChange({ target: { value: 'npm' } });
-  panel.render();
-  assert.equal(panel.setup().children, 'Copy setup request');
-  assert.equal(panel.setup().disabled, true);
-  panel.source().onChange({ target: { value: 'project' } });
-  panel.render();
-  clipboardFails = true;
-  await panel.setup().onClick();
-  panel.render();
-  assert.ok(panel.find((props) => props['aria-label'] === 'Setup request to copy manually'));
-  panel.source().onChange({ target: { value: 'npm' } });
-  panel.render();
-  assert.equal(panel.find((props) => props['aria-label'] === 'Setup request to copy manually'), null);
 });
 
-test('project setup locks source changes and duplicate copies while an asynchronous copy is pending', async (t) => {
+test('unmount aborts pending manifest and asset checks and ignores late responses', async () => {
+  const bundle = await readFile(bundlePath, 'utf8');
+  for (const phase of ['manifest', 'assets']) {
+    let release;
+    let signal;
+    const pending = new Promise((resolve) => { release = resolve; });
+    const copied = [];
+    const panel = panelHandlerFixture(bundle, async (text) => copied.push(text), {
+      fetch: async (url, options) => {
+        if (phase === 'manifest' || !String(url).endsWith('/manifest.json')) {
+          signal = options.signal;
+          await pending;
+        }
+        return githubFixtureFetch(url);
+      },
+    });
+    try {
+      await panel.settle();
+      const copying = phase === 'assets' ? panel.setup().onClick() : null;
+      await panel.settle();
+      assert.ok(signal);
+      panel.cleanup();
+      assert.equal(signal.aborted, true);
+      release();
+      await copying;
+      await panel.settle();
+      assert.deepEqual(copied, []);
+      assert.equal(panel.updatesAfterUnmount(), 0);
+      assert.deepEqual(panel.snackMessages, []);
+    } finally {
+      release();
+      panel.cleanup();
+    }
+  }
+});
+
+test('setup copy excludes duplicate/example copies and selection/settings changes until completion', async (t) => {
   let releaseClipboard;
   const pendingClipboard = new Promise((resolve) => { releaseClipboard = resolve; });
   const copied = [];
@@ -528,24 +472,96 @@ test('project setup locks source changes and duplicate copies while an asynchron
   });
   t.after(() => { releaseClipboard(); panel.cleanup(); });
   await panel.settle();
-  panel.source().onChange({ target: { value: 'project' } });
-  panel.render();
-  const sourceHandler = panel.source().onChange;
-  const setupHandler = panel.setup().onClick;
-  const pendingSetup = setupHandler();
-  sourceHandler({ target: { value: 'npm' } });
-  await setupHandler();
+  const toggle = panel.skill('reconciliation').onChange;
+  const edit = panel.button('Edit settings').onClick;
+  const example = panel.button('Copy example').onClick;
+  const setup = panel.setup().onClick;
+  const copying = setup();
+  toggle();
+  await edit();
+  await example();
+  await setup();
   await panel.settle();
-  assert.equal(panel.source().value, 'project', 'the synchronous guard rejects a stale source event');
-  assert.equal(panel.source().disabled, true);
+  assert.equal(panel.skill('reconciliation').checked, false);
+  assert.equal(panel.skill('reconciliation').disabled, true);
+  assert.equal(panel.button('Edit settings').disabled, true);
   assert.equal(panel.setup().disabled, true);
   assert.equal(copied.length, 1);
-  assert.match(copied[0], /tools\/antom-builder/);
   releaseClipboard();
-  await pendingSetup;
+  await copying;
   panel.render();
   assert.equal(panel.setup().children, 'Request copied');
-  assert.equal(panel.source().disabled, false);
+  assert.equal(panel.skill('reconciliation').disabled, false);
+});
+
+test('clipboard fallback and copied state clear when selection or saved settings change', async (t) => {
+  const attempts = [];
+  let clipboardFails = true;
+  const panel = panelHandlerFixture(await readFile(bundlePath, 'utf8'), async (text) => {
+    attempts.push(text);
+    if (clipboardFails) throw new Error('fixture clipboard failure');
+  });
+  t.after(() => panel.cleanup());
+  await panel.settle();
+  const oldSelectionCopy = panel.setup().onClick;
+  await oldSelectionCopy();
+  panel.render();
+  assert.ok(panel.manualRequest());
+  panel.skill('reconciliation').onChange();
+  panel.render();
+  assert.equal(panel.manualRequest(), null);
+  await oldSelectionCopy();
+  assert.equal(attempts.length, 1, 'a stale selection handler cannot copy a previous selection');
+  await panel.setup().onClick();
+  panel.render();
+  assert.ok(panel.manualRequest());
+  const oldSettingsCopy = panel.setup().onClick;
+  panel.pluginSettings.set('clientId', 'client_2');
+  await panel.button('Edit settings').onClick();
+  panel.render();
+  assert.equal(panel.manualRequest(), null);
+  await oldSettingsCopy();
+  assert.equal(attempts.length, 2, 'a stale settings handler cannot copy a previous settings snapshot');
+  clipboardFails = false;
+  await panel.setup().onClick();
+  panel.render();
+  assert.equal(panel.setup().children, 'Request copied');
+  assert.match(attempts.at(-1), /"clientId": "client_2"/);
+  panel.skill('reconciliation').onChange();
+  panel.render();
+  assert.equal(panel.setup().children, 'Copy setup request');
+});
+
+test('invalid settings fail closed and bill-only copy omits payment configuration', async (t) => {
+  const requests = [];
+  const copied = [];
+  const panel = panelHandlerFixture(await readFile(bundlePath, 'utf8'), async (text) => copied.push(text), {
+    fetch: async (url) => {
+      requests.push(String(url));
+      return githubFixtureFetch(url);
+    },
+  });
+  t.after(() => panel.cleanup());
+  await panel.settle();
+  panel.pluginSettings.set('gatewayOrigin', 'https://invalid.example');
+  await panel.setup().onClick();
+  panel.render();
+  assert.deepEqual(copied, []);
+  assert.equal(panel.setup().disabled, true);
+  panel.skill('integration').onChange();
+  panel.render();
+  assert.equal(panel.setup().disabled, true, 'an empty selection cannot be copied');
+  panel.skill('reconciliation').onChange();
+  panel.render();
+  assert.equal(panel.setup().disabled, false, 'bill-only import does not require payment settings');
+  assert.equal(panel.button('Edit settings'), null);
+  requests.length = 0;
+  await panel.setup().onClick();
+  assert.equal(copied.length, 1);
+  assert.doesNotMatch(copied[0], /nonSecretPaymentConfig|\.builder\/skills\/antom-integration/);
+  assert.match(copied[0], /Bill-only import: do not read, create or change \.env\.example or any payment configuration/);
+  const files = githubSource.manifest.skills.find((skill) => skill.id === 'reconciliation').files;
+  assert.deepEqual(requests.sort(), [githubSource.baseUrl + 'manifest.json', ...files.map((file) => file.url)].sort());
 });
 
 function settingsFixture(bundle) {

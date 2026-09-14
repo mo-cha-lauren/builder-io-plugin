@@ -127,6 +127,10 @@ test('Pages stages exactly the complete pinned Skill files and browser release a
   assert.ok(html.includes(release.pluginUrl));
   assert.ok(html.includes(REVISION));
   assert.match(html, /Builder cloud import.*require separate acceptance/);
+  assert.match(html, /Copy setup request.*Builder Agent chat.*start a new chat/);
+  assert.match(html, /custom\/private-plugin entitlement/);
+  assert.match(html, /public GitHub repository is not an approved Builder public plugin/);
+  assert.doesNotMatch(html, /Installer source|GitHub \(no npm\)|Public npm|Project test package|Download Skill ZIP|Download config/);
 });
 
 test('Pages rejects a different build revision before creating output', async (t) => {

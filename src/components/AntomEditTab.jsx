@@ -7,41 +7,18 @@ import Card from '@material-ui/core/Card';
 import CardContent from '@material-ui/core/CardContent';
 import Typography from '@material-ui/core/Typography';
 import pkg from '../../package.json';
-import skillArchives from '../../.generated/skill-downloads.json';
-import projectInstallerManifest from '../../.generated/project-installer-manifest.json';
 import githubSource from '../../.generated/github-source.json';
 import { checkGithubSource, createGithubSetupPrompt } from '../githubInstall.mjs';
 import AntomUsageGuide from './AntomUsageGuide';
 import {
   copyPlainText,
   createEmptySettingsSnapshot,
-  getSettingsHash,
   validateSettingsSnapshot,
 } from '../antomSettings.mjs';
-import {
-  SKILL_OPTIONS,
-  checkSetupPackage,
-  createCheckCommand,
-  createCloudSetupPrompt,
-  createConfigCommand,
-  createConfigExport,
-  createInstallCommand,
-  createProjectSetupPrompt,
-  downloadConfigFile,
-  downloadSkillArchive,
-} from '../installExperience.mjs';
+import { SKILL_OPTIONS } from '../installExperience.mjs';
 
 const PLUGIN_ID = pkg.name;
 const SETUP_COPY_KEY = 'setup-request';
-const commandStyle = {
-  backgroundColor: '#f7f8fa',
-  padding: '8px',
-  borderRadius: '4px',
-  fontSize: '11px',
-  overflowWrap: 'anywhere',
-  whiteSpace: 'pre-wrap',
-  margin: '8px 0',
-};
 const buttonStyle = { textTransform: 'none' };
 const buttonRowStyle = { display: 'flex', flexWrap: 'wrap', gap: '8px' };
 const smallTextStyle = { fontSize: '12px', lineHeight: 1.5 };
@@ -49,17 +26,14 @@ const smallTextStyle = { fontSize: '12px', lineHeight: 1.5 };
 /** Copies a request for the user to run in Builder Agent; never executes it. */
 const AntomEditTab = ({ openSettings }) => {
   const [selectedSkills, setSelectedSkills] = useState(['integration']);
-  const [installerSource, setInstallerSource] = useState('github');
   const [copiedText, setCopiedText] = useState('');
   const [copyingKey, setCopyingKey] = useState('');
   const [manualRequest, setManualRequest] = useState('');
   const [settingsSnapshot, setSettingsSnapshot] = useState(createEmptySettingsSnapshot());
-  const [lastExportedHash, setLastExportedHash] = useState('');
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [settingsError, setSettingsError] = useState('');
   const [openingSettings, setOpeningSettings] = useState(false);
-  const [exportingConfig, setExportingConfig] = useState(false);
-  const [packageState, setPackageState] = useState({ source: 'github', status: 'checking', message: 'Checking GitHub source…' });
+  const [packageState, setPackageState] = useState({ status: 'checking', message: 'Checking source manifest…' });
   const [guideOpen, setGuideOpen] = useState(false);
   const copyResetTimer = useRef(null);
   const mountedRef = useRef(false);
@@ -71,14 +45,12 @@ const AntomEditTab = ({ openSettings }) => {
   const packageCheckingRef = useRef(false);
   const copySequenceRef = useRef(0);
   const copyLockRef = useRef(false);
-  const setupLockRef = useRef(false);
   const settingsLockRef = useRef(false);
-  const exportLockRef = useRef(false);
-  const installerSourceRef = useRef('github');
+  const sourceAvailableRef = useRef(false);
+  const setupRevisionRef = useRef(0);
+  const setupRevision = setupRevisionRef.current;
   const hasIntegration = selectedSkills.includes('integration');
   const copyingSetup = copyingKey === SETUP_COPY_KEY;
-  const usingProjectInstaller = installerSource === 'project';
-  const usingGithubSource = installerSource === 'github';
 
   useEffect(() => {
     mountedRef.current = true;
@@ -93,9 +65,8 @@ const AntomEditTab = ({ openSettings }) => {
       copyControllerRef.current?.abort();
       packageCheckingRef.current = false;
       copyLockRef.current = false;
-      setupLockRef.current = false;
       settingsLockRef.current = false;
-      exportLockRef.current = false;
+      sourceAvailableRef.current = false;
       clearTimeout(copyResetTimer.current);
     };
   }, []);
@@ -126,6 +97,8 @@ const AntomEditTab = ({ openSettings }) => {
     const requestId = ++refreshSequenceRef.current;
     setSettingsLoading(true);
     setManualRequest('');
+    setCopiedText('');
+    clearTimeout(copyResetTimer.current);
     try {
       const nextSnapshot = await loadCurrentSettings();
       if (!mountedRef.current || requestId !== refreshSequenceRef.current) return null;
@@ -143,23 +116,21 @@ const AntomEditTab = ({ openSettings }) => {
   };
 
   const refreshPackage = async () => {
-    if (packageCheckingRef.current || !mountedRef.current) return;
-    const source = installerSourceRef.current;
-    if (source === 'project') return;
+    if (packageCheckingRef.current || copyLockRef.current || !mountedRef.current) return;
     packageCheckingRef.current = true;
+    sourceAvailableRef.current = false;
     const requestId = ++packageSequenceRef.current;
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
     packageControllerRef.current = controller;
-    setPackageState({ source, status: 'checking', message: source === 'github' ? 'Checking GitHub source…' : 'Checking setup package…' });
+    setPackageState({ status: 'checking', message: 'Checking source manifest…' });
     try {
-      const result = source === 'github'
-        ? await checkGithubSource(githubSource, { signal: controller?.signal })
-        : await checkSetupPackage(pkg, { signal: controller?.signal });
-      if (!mountedRef.current || requestId !== packageSequenceRef.current || source !== installerSourceRef.current) return;
-      setPackageState({ ...result, source });
+      const result = await checkGithubSource(githubSource, { signal: controller?.signal });
+      if (!mountedRef.current || requestId !== packageSequenceRef.current) return;
+      sourceAvailableRef.current = result.status === 'available';
+      setPackageState(result);
     } catch {
       if (!mountedRef.current || requestId !== packageSequenceRef.current) return;
-      setPackageState({ source, status: 'unavailable', message: 'Unable to verify the selected source. Retry.' });
+      setPackageState({ status: 'unavailable', message: 'Unable to verify the source manifest. Retry.' });
     } finally {
       if (mountedRef.current && requestId === packageSequenceRef.current) {
         packageCheckingRef.current = false;
@@ -169,8 +140,9 @@ const AntomEditTab = ({ openSettings }) => {
   };
 
   const handleOpenSettings = async () => {
-    if (settingsLockRef.current || setupLockRef.current || exportLockRef.current) return;
+    if (settingsLockRef.current || copyLockRef.current) return;
     settingsLockRef.current = true;
+    setupRevisionRef.current += 1;
     const lifecycle = lifecycleRef.current;
     setOpeningSettings(true);
     setManualRequest('');
@@ -195,7 +167,6 @@ const AntomEditTab = ({ openSettings }) => {
   const copyContent = async (getText, key, message) => {
     if (copyLockRef.current || !mountedRef.current) return;
     copyLockRef.current = true;
-    setupLockRef.current = key === SETUP_COPY_KEY;
     const requestId = ++copySequenceRef.current;
     const isCurrent = () => mountedRef.current && requestId === copySequenceRef.current;
     setCopyingKey(key);
@@ -227,7 +198,6 @@ const AntomEditTab = ({ openSettings }) => {
     } finally {
       if (isCurrent()) {
         copyLockRef.current = false;
-        setupLockRef.current = false;
         setCopyingKey('');
       }
     }
@@ -236,82 +206,33 @@ const AntomEditTab = ({ openSettings }) => {
   const copyText = (text) => copyContent(() => text, text);
 
   const copySetupRequest = () => {
-    const source = installerSourceRef.current;
-    if (!selectedSkills.length || (source !== 'project' &&
-      (packageState.source !== source || packageState.status !== 'available')) ||
-      (hasIntegration && (settingsLoading || settingsError || settingsLockRef.current || exportLockRef.current))) return;
+    if (setupRevision !== setupRevisionRef.current || !selectedSkills.length || !sourceAvailableRef.current ||
+      settingsLockRef.current || (hasIntegration && (settingsLoading || settingsError))) return;
     const selection = [...selectedSkills];
     return copyContent(async () => {
       const latestSnapshot = hasIntegration ? await refreshSettings() : {};
-      if (!latestSnapshot || !mountedRef.current || source !== installerSourceRef.current) return null;
+      if (!latestSnapshot || !mountedRef.current || setupRevision !== setupRevisionRef.current) return null;
       const controller = typeof AbortController === 'function' ? new AbortController() : null;
       copyControllerRef.current = controller;
       try {
-        const request = source === 'github'
-          ? await createGithubSetupPrompt(pkg, selection, latestSnapshot, githubSource, { signal: controller?.signal })
-          : source === 'project'
-            ? await createProjectSetupPrompt(pkg, selection, latestSnapshot, projectInstallerManifest)
-            : await createCloudSetupPrompt(pkg, selection, latestSnapshot);
-        return mountedRef.current && source === installerSourceRef.current ? request : null;
+        const request = await createGithubSetupPrompt(pkg, selection, latestSnapshot, githubSource, { signal: controller?.signal });
+        return mountedRef.current && setupRevision === setupRevisionRef.current ? request : null;
+      } catch (error) {
+        if (mountedRef.current && setupRevision === setupRevisionRef.current) {
+          sourceAvailableRef.current = false;
+          setPackageState({ status: 'unavailable', message: 'Unable to verify the selected Skill files. Retry.' });
+        }
+        throw error;
       } finally {
         if (copyControllerRef.current === controller) copyControllerRef.current = null;
       }
     }, SETUP_COPY_KEY, 'Request copied. Paste in Builder Agent');
   };
 
-  const changeInstallerSource = (source) => {
-    if (!['github', 'npm', 'project'].includes(source) || copyLockRef.current ||
-      settingsLockRef.current || exportLockRef.current || (hasIntegration && settingsLoading)) return;
-    if (source === installerSourceRef.current) return;
-    packageControllerRef.current?.abort();
-    packageControllerRef.current = null;
-    packageSequenceRef.current += 1;
-    packageCheckingRef.current = false;
-    installerSourceRef.current = source;
-    setInstallerSource(source);
-    copySequenceRef.current += 1;
-    clearTimeout(copyResetTimer.current);
-    setCopiedText('');
-    setManualRequest('');
-    refreshPackage();
-  };
-
-  const downloadSkills = () => {
-    try {
-      downloadSkillArchive(skillArchives, selectedSkills);
-      showMessage('Download requested. Merge the ZIP into your project; it is not installed yet.');
-    } catch {
-      showMessage('ZIP download failed. Try the installation command instead.');
-    }
-  };
-
-  const exportConfig = async () => {
-    if (exportLockRef.current || settingsLockRef.current || setupLockRef.current) return;
-    exportLockRef.current = true;
-    const lifecycle = lifecycleRef.current;
-    setExportingConfig(true);
-    try {
-      const latestSnapshot = await refreshSettings();
-      if (!latestSnapshot || !mountedRef.current || lifecycle !== lifecycleRef.current) return;
-      const content = await createConfigExport(latestSnapshot);
-      if (!mountedRef.current || lifecycle !== lifecycleRef.current) return;
-      downloadConfigFile(content);
-      setLastExportedHash(getSettingsHash(latestSnapshot));
-      showMessage('Config download requested. Run the config command to update .env.example.');
-    } catch {
-      if (mountedRef.current && lifecycle === lifecycleRef.current) {
-        showMessage('Config download failed. Check your settings and try again.');
-      }
-    } finally {
-      if (mountedRef.current && lifecycle === lifecycleRef.current) {
-        exportLockRef.current = false;
-        setExportingConfig(false);
-      }
-    }
-  };
-
   const toggleSkill = (id) => {
-    if (setupLockRef.current || settingsLockRef.current || exportLockRef.current) return;
+    if (copyLockRef.current || settingsLockRef.current) return;
+    setupRevisionRef.current += 1;
+    clearTimeout(copyResetTimer.current);
     setSelectedSkills((current) => current.includes(id)
       ? current.filter((value) => value !== id)
       : [...current, id]);
@@ -319,14 +240,8 @@ const AntomEditTab = ({ openSettings }) => {
     setManualRequest('');
   };
 
-  const installCommand = selectedSkills.length ? createInstallCommand(pkg, selectedSkills) : '';
-  const checkCommand = selectedSkills.length ? createCheckCommand(pkg, selectedSkills) : '';
-  const configCommand = createConfigCommand(pkg);
-  const currentSettingsHash = settingsError ? '' : getSettingsHash(settingsSnapshot);
-  const settingsChangedSinceExport = Boolean(lastExportedHash && lastExportedHash !== currentSettingsHash);
-  const settingsBusy = settingsLoading || openingSettings || exportingConfig || copyingSetup;
-  const setupDisabled = !selectedSkills.length || Boolean(copyingKey) || (!usingProjectInstaller &&
-    (packageState.source !== installerSource || packageState.status !== 'available')) ||
+  const settingsBusy = settingsLoading || openingSettings || copyingSetup;
+  const setupDisabled = !selectedSkills.length || Boolean(copyingKey) || packageState.status !== 'available' ||
     (hasIntegration && (settingsBusy || Boolean(settingsError)));
 
   return (
@@ -343,33 +258,15 @@ const AntomEditTab = ({ openSettings }) => {
           <div css={{ display: 'grid', gap: '8px', marginBottom: '12px' }}>
             {SKILL_OPTIONS.map(({ id, label }) => (
               <label key={id} css={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px' }}>
-                <input type="checkbox" checked={selectedSkills.includes(id)}
-                  disabled={copyingSetup || openingSettings || exportingConfig} onChange={() => toggleSkill(id)} />
+                <input type="checkbox" value={id} checked={selectedSkills.includes(id)}
+                  disabled={Boolean(copyingKey) || openingSettings} onChange={() => toggleSkill(id)} />
                 {label}
               </label>
             ))}
           </div>
-          <label css={{ display: 'grid', gap: '4px', marginBottom: '12px', ...smallTextStyle }}>
-            Installer source
-            <select aria-label="Installer source" value={installerSource}
-              disabled={Boolean(copyingKey) || openingSettings || exportingConfig || (hasIntegration && settingsLoading)}
-              onChange={(event) => changeInstallerSource(event.target.value)}
-              css={{ width: '100%', minWidth: 0, padding: '6px', font: 'inherit', border: '1px solid #ccc', borderRadius: '4px', background: '#fff' }}>
-              <option value="github">GitHub (no npm)</option>
-              <option value="npm">Public npm</option>
-              <option value="project">Project test package</option>
-            </select>
-          </label>
-          {usingGithubSource && (
-            <Typography variant="body2" color="textSecondary" css={{ ...smallTextStyle, marginBottom: '8px' }}>
-              Imports complete files with Agent tools. No install commands.
-            </Typography>
-          )}
-          {usingProjectInstaller && (
-            <Typography variant="body2" color="textSecondary" css={{ ...smallTextStyle, marginBottom: '8px' }}>
-              Uses tools/antom-builder. Project command approval is required before verification and setup.
-            </Typography>
-          )}
+          <Typography variant="body2" color="textSecondary" css={{ ...smallTextStyle, marginBottom: '8px' }}>
+            Imports complete files with Agent tools.
+          </Typography>
           {hasIntegration && (
             <div css={{ ...buttonRowStyle, alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
               <Typography variant="body2" css={smallTextStyle}>
@@ -377,7 +274,7 @@ const AntomEditTab = ({ openSettings }) => {
                   `${settingsSnapshot.authMode === 'api_key' ? 'API Key (Bearer)' : 'RSA'} · ${settingsSnapshot.environment}`}
               </Typography>
               <Button type="button" size="small" onClick={handleOpenSettings}
-                disabled={openingSettings || exportingConfig || copyingSetup} style={buttonStyle}>
+                disabled={openingSettings || Boolean(copyingKey)} style={buttonStyle}>
                 {openingSettings ? 'Opening…' : 'Edit settings'}
               </Button>
             </div>
@@ -388,22 +285,20 @@ const AntomEditTab = ({ openSettings }) => {
             </Typography>
           )}
           <Typography variant="body2" color="textSecondary" css={{ ...smallTextStyle, marginBottom: '12px' }}>
-            {usingGithubSource ? 'Paste in Builder Agent to import files and non-secret settings. Verify the written files before use.' : hasIntegration
-              ? 'Paste in the current Builder Agent chat to install Skills, merge non-secret settings into .env.example, and check setup.'
-              : 'Paste in the current Builder Agent chat to install Skills and check setup.'}
+            {hasIntegration
+              ? 'Paste in Builder Agent to import files and non-secret settings. Verify the written files before use.'
+              : 'Paste in Builder Agent to import Skill files. Verify the written files before use.'}
           </Typography>
           <Button type="button" variant="contained" color="primary" size="small"
             onClick={copySetupRequest} disabled={setupDisabled} style={buttonStyle}>
             {copyingSetup ? 'Preparing request…' : copiedText === SETUP_COPY_KEY ? 'Request copied' : 'Copy setup request'}
           </Button>
-          {!usingProjectInstaller && (usingGithubSource || packageState.status !== 'available') && (
-            <div data-testid="setup-package-status" role="status" aria-live="polite" css={{ ...smallTextStyle, marginTop: '8px', color: '#616161' }}>
-              <span>{usingGithubSource && packageState.status === 'available' ? 'Source manifest verified; project installation is not verified.' : packageState.message}</span>
-              {!['checking', 'available'].includes(packageState.status) && (
-                <Button type="button" size="small" onClick={refreshPackage} style={buttonStyle}>Retry</Button>
-              )}
-            </div>
-          )}
+          <div data-testid="setup-package-status" role="status" aria-live="polite" css={{ ...smallTextStyle, marginTop: '8px', color: '#616161' }}>
+            <span>{packageState.status === 'available' ? 'Source manifest verified; project installation is not verified.' : packageState.message}</span>
+            {!['checking', 'available'].includes(packageState.status) && (
+              <Button type="button" size="small" onClick={refreshPackage} style={buttonStyle}>Retry</Button>
+            )}
+          </div>
           {!selectedSkills.length && (
             <Typography variant="body2" color="textSecondary" role="status" css={{ ...smallTextStyle, marginTop: '8px' }}>
               Select at least one Skill.
@@ -442,68 +337,6 @@ const AntomEditTab = ({ openSettings }) => {
         </CardContent>
       </Card>
 
-      <details data-testid="local-development" css={{ ...smallTextStyle, margin: '12px 0' }}>
-        <summary css={{ cursor: 'pointer', color: '#555', padding: '4px 0' }}>Local development (optional)</summary>
-        <p>Run commands at your project root with Node.js 20+. The npm package must be accessible.</p>
-        <p><strong>Install Skills</strong></p>
-        <pre css={commandStyle}>{installCommand || 'Select at least one Skill.'}</pre>
-        <div css={buttonRowStyle}>
-          <Button type="button" variant="outlined" size="small" onClick={() => copyText(installCommand)}
-            disabled={!installCommand || Boolean(copyingKey)} style={buttonStyle}>
-            {copiedText === installCommand && installCommand ? 'Command copied' : 'Copy install command'}
-          </Button>
-          <Button type="button" variant="outlined" size="small" onClick={downloadSkills}
-            disabled={!installCommand} style={buttonStyle}>
-            Download Skill ZIP
-          </Button>
-        </div>
-        <p>Review npm&apos;s package download prompt before approving. For ZIPs, review and merge .builder/skills without overwriting existing files, then sync to Builder. Copying or downloading does not install Skills.</p>
-        {checkCommand && (
-          <div>
-            <p><strong>Check installation</strong></p>
-            <pre css={commandStyle}>{checkCommand}</pre>
-            <Button type="button" variant="outlined" size="small" onClick={() => copyText(checkCommand)}
-              disabled={Boolean(copyingKey)} style={buttonStyle}>
-              {copiedText === checkCommand ? 'Command copied' : 'Copy check command'}
-            </Button>
-          </div>
-        )}
-        {hasIntegration && (
-          <div>
-            <p><strong>Payment configuration</strong></p>
-            <div css={{ display: 'grid', gap: '4px', margin: '8px 0' }}>
-              <span>Client ID: {settingsSnapshot.clientId ? 'configured' : 'missing'}</span>
-              <span>Antom public key: {settingsSnapshot.antomPublicKey ? 'configured' : 'missing'}</span>
-              <span>Key version: {settingsSnapshot.keyVersion || '1'}</span>
-              <span>Gateway: {settingsSnapshot.gatewayOrigin}</span>
-              <span>Last refreshed: {settingsSnapshot.refreshedAt || 'not refreshed'}</span>
-            </div>
-            {settingsChangedSinceExport && <p role="status" css={{ color: '#b3261e' }}>Settings changed. Download a new config.</p>}
-            <div css={buttonRowStyle}>
-              <Button type="button" variant="outlined" size="small" onClick={() => {
-                if (!setupLockRef.current && !settingsLockRef.current && !exportLockRef.current) refreshSettings();
-              }} disabled={settingsBusy} style={buttonStyle}>
-                {settingsLoading ? 'Refreshing…' : 'Refresh settings'}
-              </Button>
-              <Button type="button" variant="outlined" size="small" onClick={exportConfig}
-                disabled={settingsBusy || Boolean(settingsError)} style={buttonStyle}>
-                {exportingConfig ? 'Preparing…' : 'Download config'}
-              </Button>
-            </div>
-            <p>Place antom.config.json at the project root, then run:</p>
-            <pre css={commandStyle}>{configCommand}</pre>
-            <Button type="button" variant="outlined" size="small" onClick={() => copyText(configCommand)}
-              disabled={Boolean(copyingKey)} style={buttonStyle}>
-              {copiedText === configCommand ? 'Command copied' : 'Copy config command'}
-            </Button>
-            <p>Updates .env.example only. Set API Keys and private keys in server Secrets. Confirm the gateway for your merchant region.</p>
-          </div>
-        )}
-        {selectedSkills.includes('reconciliation') && (
-          <p>Bill analysis needs sanitized files, Python, and separate dependencies. Online scripts use --live independently of the plugin environment; public knowledge may be fetched online.</p>
-        )}
-        <a href="https://docs.antom.com/ac/ref/antom_cli" target="_blank" rel="noopener noreferrer">Antom CLI guide</a>
-      </details>
 
       <Typography variant="body2" color="textSecondary" css={smallTextStyle}>
         Secrets stay on your server; notify always uses RSA.
