@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/ant-intl/antom-ai-tools",
+  "commit": "a1b0fb441f51358e029287d0f3f8ab1cd12af373",
+  "path": "skills/antom-reconciliation-expert",
+  "treeSha": "cc04bf5c47bdfe142c34ac69207922178a38e506",
+  "skillVersion": "2.0.0",
+  "license": "MIT",
+  "licenseFile": "UPSTREAM_LICENSE",
+  "sourceUrl": "https://github.com/ant-intl/antom-ai-tools/tree/a1b0fb441f51358e029287d0f3f8ab1cd12af373/skills/antom-reconciliation-expert",
+  "runtime": {
+    "python": ">=3.8",
+    "pythonPackages": [
+      "openpyxl>=3.0",
+      "requests>=2.20",
+      "jsonschema>=4.0"
+    ],
+    "antomCli": "Only required for online retrieval; not required for supplied-file analysis.",
+    "network": "CDN business knowledge, rules, templates and version metadata are fetched at runtime."
+  },
+  "distributionNotes": [
+    "All 15 files from the pinned canonical Skill directory are included unchanged, plus the upstream repository MIT license.",
+    "The original online retrieval scripts contain hardcoded --live arguments; Builder sandbox configuration does not change their environment.",
+    "This distribution does not execute scripts, install runtime dependencies, log in, or automatically update upstream assets."
+  ],
+  "files": [
+    {
+      "path": "SKILL.md",
+      "sourcePath": "skills/antom-reconciliation-expert/SKILL.md",
+      "bytes": 14995,
+      "sha256": "920404a8ca0aaaf31273ee62020284e638b304dd4cedebb13d1f78ea62ea17fe",
+      "gitBlobSha": "0f7f26639645e6c047634d61b41751032a794223"
+    },
+    {
+      "path": "scripts/cli.py",
+      "sourcePath": "skills/antom-reconciliation-expert/scripts/cli.py",
+      "bytes": 2740,
+      "sha256": "eccbc50352a4f4da12b363983c9a52ff2096b1be6cf3c7c7b8a8632a0fe7c7e7",
+      "gitBlobSha": "83e62332d2f630bb51a1b8720286978a52792b2b"
+    },
+    {
+      "path": "scripts/core/__init__.py",
+      "sourcePath": "skills/antom-reconciliation-expert/scripts/core/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+    },
+    {
+      "path": "scripts/core/constants.py",
+      "sourcePath": "skills/antom-reconciliation-expert/scripts/core/constants.py",
+      "bytes": 10216,
+      "sha256": "0678971b8812ea5730ab16d671e1caefcae86de72838e3d10e00e0427022bb75",
+      "gitBlobSha": "c8b2b6747626dcdc315fd80655b55becdcac42a9"
+    },
+    {
+      "path": "scripts/core/dsl_schema.json",
+      "sourcePath": "skills/antom-reconciliation-expert/scripts/core/dsl_schema.json",
+      "bytes": 3222,
+      "sha256": "4f82951d25f6e41bcaa13af0f59067a1268dd90e35b6ac1c1a4c116fb530ca4a",
+      "gitBlobSha": "7046b4b2d39ed837b5b88058c6481654ae057b88"
+    },
+    {
+      "path": "scripts/core/parser.py",
+      "sourcePath": "skills/antom-reconciliation-expert/scripts/core/parser.py",
+      "bytes": 28538,
+      "sha256": "b9cc405cd44f5c6d0d4d976cfdfc02b2b1a0c48382bd423c53b72d53130b340a",
+      "gitBlobSha": "04104d6f87aaaceedabfb465657f7aab80aa03d0"
+    },
+    {
+      "path": "scripts/core/validators.py",
+      "sourcePath": "skills/antom-reconciliation-expert/scripts/core/validators.py",
+      "bytes": 15160,
+      "sha256": "ea767dedea0feab693d3720ef3defa8d616ef7d76889393c71fb8822e95a8103",
+      "gitBlobSha": "d73acc4f818b0c77175b799564d85a00133ad939"
+    },
+    {
+      "path": "scripts/io_modules/__init__.py",
+      "sourcePath": "skills/antom-reconciliation-expert/scripts/io_modules/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+    },
+    {
+      "path": "scripts/io_modules/bill_downloader.py",
+      "sourcePath": "skills/antom-reconciliation-expert/scripts/io_modules/bill_downloader.py",
+      "bytes": 28699,
+      "sha256": "367dd3717c653ff2c495542fcc568c671a325696aa72ac0766e26904594b2e84",
+      "gitBlobSha": "cfc6bc36ee741ea8da253f2910e8c3c1a19444bd"
+    },
+    {
+      "path": "scripts/io_modules/bill_list_api.py",
+      "sourcePath": "skills/antom-reconciliation-expert/scripts/io_modules/bill_list_api.py",
+      "bytes": 8079,
+      "sha256": "78536e02aae6da1a89a07137b5458ed8120523be3fa11b9e992c9e63381bede1",
+      "gitBlobSha": "51853fd3b330b3206848b83dc2098e0f819bacc7"
+    },
+    {
+      "path": "scripts/io_modules/error_codes.py",
+      "sourcePath": "skills/antom-reconciliation-expert/scripts/io_modules/error_codes.py",
+      "bytes": 5906,
+      "sha256": "33b48304d64aac45b242b0a584af60e6f126aea191a42fd1b004c6c5262b8adf",
+      "gitBlobSha": "a62dda5fa423d0e5f3b1feb63da59a3661433c1b"
+    },
+    {
+      "path": "scripts/retrieval/__init__.py",
+      "sourcePath": "skills/antom-reconciliation-expert/scripts/retrieval/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+    },
+    {
+      "path": "scripts/retrieval/base_api_client.py",
+      "sourcePath": "skills/antom-reconciliation-expert/scripts/retrieval/base_api_client.py",
+      "bytes": 7197,
+      "sha256": "6abbfdc2af9ee4a5614563638e091c16310b1b366944d31f607dbe9cca2f23a6",
+      "gitBlobSha": "39d3f193b48f9be1e299774690e57b08ada2b527"
+    },
+    {
+      "path": "scripts/retrieval/cdn_loader.py",
+      "sourcePath": "skills/antom-reconciliation-expert/scripts/retrieval/cdn_loader.py",
+      "bytes": 8497,
+      "sha256": "fc827aee29087e26036963292028b372b8de3f4713dc440762a9a43ad9cb6fde",
+      "gitBlobSha": "20f5135823031abe323b553bcc5a43afdeab4554"
+    },
+    {
+      "path": "scripts/retrieval/transaction_detail_query.py",
+      "sourcePath": "skills/antom-reconciliation-expert/scripts/retrieval/transaction_detail_query.py",
+      "bytes": 3923,
+      "sha256": "28bdf9ead08b6f8d938ce1d9c2cf28260c9b5f1d55ea9f6a648b9a6c07b4f333",
+      "gitBlobSha": "318467cfdb7590d61afab860c69f5ce5a469c8a8"
+    },
+    {
+      "path": "UPSTREAM_LICENSE",
+      "sourcePath": "LICENSE",
+      "bytes": 1062,
+      "sha256": "240c1022b65c19d0b344cb615f99b165fc5667b54f204182dd144a18acc25ca1",
+      "gitBlobSha": "d1beb2b4616e80995a4ed9fa5035f27fc8f29e98"
+    }
+  ]
+}

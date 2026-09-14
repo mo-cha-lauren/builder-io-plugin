@@ -1,0 +1,77 @@
+{
+  "name": "@antglobal/builder-io-plugin-antom-payment",
+  "version": "1.0.0",
+  "description": "Antom Payment Integration Plugin for Builder.io",
+  "entry": "plugin",
+  "output": "plugin.system.js",
+  "main": "dist/plugin.system.js",
+  "bin": {
+    "antom-builder": "bin/antom-builder.mjs"
+  },
+  "antomBuilder": {
+    "setupProtocol": 1
+  },
+  "files": [
+    "dist",
+    "bin",
+    "lib",
+    "src/antomSettings.mjs",
+    "LEGAL.md"
+  ],
+  "scripts": {
+    "predev": "npm run build:skills",
+    "prestart": "npm run build:skills",
+    "dev": "cross-env BABEL_ENV=development webpack-dev-server --mode development",
+    "build:skills": "node scripts/build-skill-bundle.mjs",
+    "build": "npm run build:skills && cross-env BABEL_ENV=production webpack --mode production",
+    "start": "cross-env BABEL_ENV=development webpack-dev-server --mode development",
+    "sync:antom-skill": "node scripts/sync-antom-skill.mjs",
+    "check:antom-skill": "node scripts/sync-antom-skill.mjs --check",
+    "check:antom-skill-drift": "node scripts/check-antom-skill-drift.mjs",
+    "test": "npm run check:antom-skill && npm run build && node --test",
+    "test:package": "node scripts/package-install-smoke.mjs",
+    "test:reconciliation": "python3 -B test/reconciliation-smoke.py",
+    "prepack": "npm test"
+  },
+  "keywords": [
+    "builder.io",
+    "antom",
+    "payment",
+    "plugin",
+    "skill"
+  ],
+  "author": "Antom Technical Service <TechnicalService@antom.com>",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mo-cha-lauren/builder-io-plugin.git"
+  },
+  "homepage": "https://github.com/mo-cha-lauren/builder-io-plugin#readme",
+  "bugs": {
+    "url": "https://github.com/mo-cha-lauren/builder-io-plugin/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "overrides": {
+    "qs": "^6.16.0",
+    "uuid": "^11.1.1"
+  },
+  "devDependencies": {
+    "@babel/preset-react": "^7.18.6",
+    "@builder.io/app-context": "^1.0.0",
+    "@builder.io/react": "^2.0.13",
+    "@emotion/core": "^10.0.22",
+    "@material-ui/core": "^4.12.4",
+    "babel-loader": "^8.2.5",
+    "cross-env": "^7.0.3",
+    "fflate": "0.8.3",
+    "webpack": "^5.74.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^5.2.4"
+  }
+}

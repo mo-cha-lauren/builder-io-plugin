@@ -1,0 +1,3 @@
+.builder/skills/antom-integration/*.md text eol=lf
+vendor/** text eol=lf
+adapters/**/*.md text eol=lf
