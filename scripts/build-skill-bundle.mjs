@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { zipSync } from 'fflate';
 import { buildProjectInstaller } from './build-project-installer.mjs';
+import { createGithubSource, getBuildRevision } from './build-github-source.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const digest = (value) => createHash('sha256').update(value).digest('hex');
@@ -142,6 +143,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   await mkdir(outputDirectory, { recursive: true });
   await writeFile(path.join(outputDirectory, 'skill-bundle.json'), `${JSON.stringify(bundle, null, 2)}\n`);
   await writeFile(path.join(outputDirectory, 'skill-downloads.json'), `${JSON.stringify(downloads)}\n`);
+  await writeFile(path.join(outputDirectory, 'github-source.json'),
+    `${JSON.stringify(createGithubSource(bundle, getBuildRevision(root)), null, 2)}\n`);
   await buildProjectInstaller(root, bundle);
   console.log(`Built ${bundle.skills.length} pinned Skills and ${Object.keys(downloads).length} ZIP selections.`);
 }

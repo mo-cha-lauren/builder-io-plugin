@@ -1,6 +1,6 @@
 # Antom Payment Plugin for Builder.io
 
-> Development source snapshot. This repository does not publish an npm package or a GitHub Pages site. The current npm-based cloud setup requires a separately published package, and the complete Builder cloud installation flow has not yet passed acceptance testing.
+> Development distribution. GitHub Pages publishes the browser plugin and pinned Skill data after its workflow succeeds; it does not publish an npm package. The GitHub source is verified in the browser. Import into a Builder project and destination-file verification require separate cloud acceptance and are not proven by a green build.
 
 Antom's Builder.io editor plugin helps teams install reviewed, pinned Antom Skills once per project, then use them through ordinary Builder Agent chat. No additional backend service or MCP connection is required.
 
@@ -8,7 +8,7 @@ The plugin:
 
 - Adds an `Antom` editor tab.
 - Stores optional, non-secret Antom reference values in Builder plugin settings.
-- Creates one version-pinned setup request for Builder Agent to run in the connected cloud project.
+- Creates one revision-pinned GitHub file-import request for Builder Agent in the connected cloud project, without an installation command.
 - Supports payment integration and supplied-file settlement analysis, including the required supporting scripts.
 - Includes validated, non-secret payment configuration in the setup request and updates `.env.example` only.
 - Keeps local installer commands, configuration exports and complete Skill ZIP downloads as optional alternatives.
@@ -20,6 +20,50 @@ It never stores an API key or merchant private key, or authenticates Antom reque
 ## Install in a Builder Space
 
 ![Builder.io plugin installation settings](./docs/media/builder-installation.png)
+
+### From GitHub Pages (no npm publication)
+
+1. In this repository, select **Settings → Pages → Source → GitHub Actions**.
+2. Wait for **Actions → Publish plugin to GitHub Pages** to finish successfully on `main`.
+3. In Builder, open your **Space settings → Integrations → Plugins → Edit** and add:
+
+   ```text
+   https://mo-cha-lauren.github.io/builder-io-plugin/plugin.system.js?pluginId=@antglobal/builder-io-plugin-antom-payment
+   ```
+
+4. Remove an older URL for this same plugin from the Space plugin list if present, then reload Builder. Do not install duplicate copies of the same plugin ID.
+5. In the **Antom** tab, keep **Installer source → GitHub (no npm)**, select **Payment integration**, review non-secret settings, and copy the setup request into the current target project's Agent chat.
+
+Use an ordinary target application, not this plugin's source repository. The
+target must not have preinstalled Antom Skills or `tools/antom-builder` when
+testing a first installation. GitHub mode imports complete files using existing
+permitted Agent web-reading and file-editing tools; it does not run an installer,
+require npm, add a backend/MCP service, or authorize command-policy changes.
+
+The panel verifies the pinned manifest and, before copying, the selected source
+files' exact byte lengths and SHA-256 hashes. **Source manifest verified** does not
+mean the target project is installed. The Agent must read all source text in full,
+preflight every destination/config conflict, create only missing files and read
+the result back. Stop if native tools are denied/unavailable, return transformed
+or truncated content, cannot establish safe project paths, or find conflicts.
+Do not work around the failure with shell commands or a preloaded test package.
+
+For payment integration expect **5 files** under
+`.builder/skills/antom-integration/`; reconciliation adds **19 files** under
+`.builder/skills/antom-reconciliation-expert/`. Configuration touches only
+`.env.example`, with secrets left empty. Bill-only import leaves it untouched.
+Ask Agent to report changed/skipped/conflicting files and full read-back results.
+If native destination hashing is not available, it must report
+**Destination SHA-256 not verified**, not invent a hash or claim byte-level
+verification. Start a new chat to test Skill discovery only after complete import,
+keeping verification and runtime limitations explicit. This route still requires
+actual Builder cloud acceptance; source verification alone is not sufficient.
+
+The site hosts only the current deployment's revision. Old plugin builds fail
+closed when their pinned data is no longer available; reload the current plugin
+instead of silently selecting another revision. The site root and `release.json`
+show the deployed commit and plugin hash. Local build dependencies still use npm;
+no npm registry release or npm command is needed by the GitHub import request.
 
 ### From Builder Integrations (after listing)
 
@@ -36,7 +80,7 @@ It never stores an API key or merchant private key, or authenticates Antom reque
 
 The two installation routes above require a corresponding Builder listing or
 public npm release. Publishing this source repository does not make either
-route available. Use the local development setup below to load the editor panel.
+route available. GitHub Pages and local development are separate loading routes.
 
 ## Use the plugin
 
@@ -57,7 +101,7 @@ configuration before writing. It preserves customized Skill files and reports
 anything that needs manual resolution. It never installs project dependencies
 or accesses real `.env` files or secret-manager values.
 
-With **Installer source → Public npm** (the default), cloud setup requires Node.js 20+, npm and access to the exact public npm package
+With **Installer source → Public npm** (an optional legacy source), cloud setup requires Node.js 20+, npm and access to the exact public npm package
 version used by the plugin. The panel checks that version before enabling
 **Copy setup request**. If the check fails, review the status and select
 **Retry** after connectivity or package availability is restored. A published,
@@ -406,7 +450,21 @@ MCP. It tests project-local installation in Builder, not the public npm download
 path. The panel cannot verify cloud files itself and never treats selecting a
 test source or copying a request as a successful installation.
 
-## Release maintenance
+## GitHub Pages maintenance
+
+The Pages workflow builds and tests the exact `main` commit, stages only the
+browser bundle/licenses and complete inert Skill data, then deploys with
+GitHub's Pages actions. It never uploads the repository tree or executes the
+copied upstream scripts as part of installation. Build permissions are read-only;
+only the deployment job receives Pages/OIDC permissions. No personal token is
+needed. A workflow running on any other branch cannot deploy.
+
+After a successful deployment, verify the public plugin URL, `release.json`,
+manifest and all selected asset hashes. Then repeat the clean Builder project
+import, conflict/repeat-run and new-chat discovery checks above. Do not mark the
+cloud installation accepted solely because local tests or Pages deployment pass.
+
+## npm release maintenance (optional)
 
 For each new release:
 

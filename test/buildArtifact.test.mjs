@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile, stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import { webcrypto } from 'node:crypto';
 import { test } from 'node:test';
 import path from 'node:path';
 import vm from 'node:vm';
@@ -13,6 +14,24 @@ const ReactDOMServer = require('react-dom/server');
 const root = fileURLToPath(new URL('../', import.meta.url));
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
 const bundlePath = path.join(root, pkg.main);
+const githubSource = JSON.parse(await readFile(path.join(root, '.generated/github-source.json'), 'utf8'));
+const skillBundle = JSON.parse(await readFile(path.join(root, '.generated/skill-bundle.json'), 'utf8'));
+const sourceFiles = new Map(skillBundle.skills.flatMap((skill) => skill.files.map((file) => [file.path, file.content])));
+
+async function githubFixtureFetch(url) {
+  const baseUrl = `${githubSource.baseUrl.replace(/\/$/, '')}/`;
+  if (String(url) === new URL('manifest.json', baseUrl).href) {
+    return new Response(`${JSON.stringify(githubSource.manifest, null, 2)}\n`, {
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+  const file = githubSource.manifest.skills.flatMap((skill) => skill.files)
+    .find((entry) => new URL(entry.url, baseUrl).href === String(url));
+  if (file && sourceFiles.has(file.path)) {
+    return new Response(sourceFiles.get(file.path), { headers: { 'content-type': 'text/plain; charset=utf-8' } });
+  }
+  return new Response('', { status: 404 });
+}
 
 function captureSystemRegistration(bundle, globals = {}) {
   let registration;
@@ -27,16 +46,10 @@ function captureSystemRegistration(bundle, globals = {}) {
     URL,
     clearTimeout,
     console,
-    fetch: async () => ({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        name: pkg.name, version: pkg.version,
-        bin: { 'antom-builder': 'bin/antom-builder.mjs' },
-        antomBuilder: { setupProtocol: 1 },
-      }),
-    }),
+    crypto: webcrypto,
+    fetch: githubFixtureFetch,
     setTimeout,
+    TextDecoder,
     TextEncoder,
     ...globals,
   });
@@ -273,13 +286,15 @@ test('main panel offers two cloud setup cards and keeps local alternatives colla
   const setupButton = buttons.find(([, , content]) => plainText(content) === 'Copy setup request');
   assert.ok(setupButton, 'cloud setup must be the primary action');
   assert.match(setupButton[1], /\bdisabled(?:=""|="disabled")?(?:\s|$)/,
-    'setup stays disabled until the npm version and saved settings have been checked');
+    'setup stays disabled until the GitHub source and saved settings have been checked');
   const sourceSelect = markup.match(/<select\b[^>]*aria-label="Installer source"[^>]*>([\s\S]*?)<\/select>/);
   assert.ok(sourceSelect, 'development installation requires an explicit source selection');
-  assertSelected(sourceSelect[0], 'npm');
+  assertSelected(sourceSelect[0], 'github');
+  assert.match(sourceSelect[1], /<option\b[^>]*value="github"[^>]*>GitHub \(no npm\)<\/option>/);
   assert.match(sourceSelect[1], /<option\b[^>]*value="npm"[^>]*>Public npm<\/option>/);
   assert.match(sourceSelect[1], /<option value="project">Project test package<\/option>/);
-  assert.doesNotMatch(visible, /Uses tools\/antom-builder/, 'npm remains the default source');
+  assert.doesNotMatch(visible, /Uses tools\/antom-builder/, 'GitHub does not require a preloaded installer');
+  assert.match(visible, /Imports complete files with Agent tools\. No install commands\./);
   assert.ok(buttons.some(([, , content]) => plainText(content) === 'Usage guide'),
     'Usage guide opens built-in help as a button');
   assert.doesNotMatch(markup, /<a\b[^>]*>[\s]*Usage guide<\/a>/);
@@ -288,7 +303,7 @@ test('main panel offers two cloud setup cards and keeps local alternatives colla
 
 // Exercise the production panel's actual event handlers with a small hook
 // scheduler. Builder, network and clipboard remain fixtures, not cloud E2E.
-function panelHandlerFixture(bundle, writeText) {
+function panelHandlerFixture(bundle, writeText, { fetch: fetchFunction = githubFixtureFetch } = {}) {
   const slots = [];
   let cursor = 0;
   let effects = [];
@@ -321,7 +336,7 @@ function panelHandlerFixture(bundle, writeText) {
   const fixture = executeBundle(bundle, {
     react,
     globals: {
-      fetch: async () => ({ ok: false, status: 404 }),
+      fetch: fetchFunction,
       navigator: { clipboard: { writeText } },
     },
   });
@@ -363,6 +378,104 @@ function panelHandlerFixture(bundle, writeText) {
   };
 }
 
+test('GitHub is the default source, verifies before copy, and makes no npm requests', async (t) => {
+  const requests = [];
+  const copied = [];
+  const panel = panelHandlerFixture(await readFile(bundlePath, 'utf8'), async (text) => copied.push(text), {
+    fetch: async (url, options) => {
+      requests.push(String(url));
+      return githubFixtureFetch(url, options);
+    },
+  });
+  t.after(() => panel.cleanup());
+  await panel.settle();
+  assert.equal(panel.source().value, 'github');
+  assert.equal(panel.setup().disabled, false);
+  assert.ok(panel.find((props) => props.children === 'Source manifest verified; project installation is not verified.'));
+  await panel.setup().onClick();
+  panel.render();
+  assert.equal(copied.length, 1);
+  assert.match(copied[0], /\.builder\/skills\/antom-integration/);
+  assert.ok(requests.length >= 6, 'copy checks all five integration files, not only the manifest');
+  assert.ok(requests.every((url) => url.startsWith(githubSource.baseUrl)));
+  assert.ok(requests.every((url) => !url.includes('registry.npmjs.org')));
+  assert.equal(panel.setup().children, 'Request copied');
+  const staleGithubCopy = panel.setup().onClick;
+  panel.source().onChange({ target: { value: 'npm' } });
+  await staleGithubCopy();
+  assert.equal(copied.length, 1, 'a stale handler cannot reuse GitHub verification for npm');
+  await panel.settle();
+  panel.source().onChange({ target: { value: 'project' } });
+  panel.render();
+  assert.equal(panel.setup().children, 'Copy setup request', 'source change clears the old copied state');
+});
+
+test('unavailable GitHub source disables copy without falling back to npm', async (t) => {
+  const requests = [];
+  const copied = [];
+  const panel = panelHandlerFixture(await readFile(bundlePath, 'utf8'), async (text) => copied.push(text), {
+    fetch: async (url) => {
+      requests.push(String(url));
+      return new Response('', { status: 404 });
+    },
+  });
+  t.after(() => panel.cleanup());
+  await panel.settle();
+  assert.equal(panel.source().value, 'github');
+  assert.equal(panel.setup().disabled, true);
+  await panel.setup().onClick();
+  assert.deepEqual(copied, []);
+  assert.ok(panel.find((props) => props['data-testid'] === 'setup-package-status'));
+  assert.ok(requests.length > 0);
+  assert.ok(requests.every((url) => url.startsWith(githubSource.baseUrl)));
+});
+
+test('GitHub asset verification failure never copies an installation request', async (t) => {
+  const copied = [];
+  const panel = panelHandlerFixture(await readFile(bundlePath, 'utf8'), async (text) => copied.push(text), {
+    fetch: async (url) => String(url).endsWith('/manifest.json')
+      ? githubFixtureFetch(url)
+      : new Response('corrupt source fixture', { headers: { 'content-type': 'text/plain' } }),
+  });
+  t.after(() => panel.cleanup());
+  await panel.settle();
+  assert.equal(panel.setup().disabled, false, 'manifest availability does not promise valid file assets');
+  await panel.setup().onClick();
+  panel.render();
+  assert.deepEqual(copied, []);
+  assert.equal(panel.find((props) => props['aria-label'] === 'Setup request to copy manually'), null);
+  assert.equal(panel.setup().children, 'Copy setup request');
+});
+
+test('source switches abort availability checks and ignore stale GitHub success', async (t) => {
+  let releaseGithub;
+  let githubSignal;
+  const pendingGithub = new Promise((resolve) => { releaseGithub = resolve; });
+  const panel = panelHandlerFixture(await readFile(bundlePath, 'utf8'), async () => {}, {
+    fetch: async (url, options) => {
+      if (String(url).startsWith(githubSource.baseUrl)) {
+        githubSignal = options.signal;
+        await pendingGithub;
+        return githubFixtureFetch(url);
+      }
+      return new Response('', { status: 404 });
+    },
+  });
+  t.after(() => { releaseGithub(); panel.cleanup(); });
+  await panel.settle();
+  assert.equal(panel.setup().disabled, true);
+  assert.ok(githubSignal);
+  panel.source().onChange({ target: { value: 'npm' } });
+  await panel.settle();
+  assert.equal(githubSignal.aborted, true);
+  assert.equal(panel.source().value, 'npm');
+  releaseGithub();
+  await panel.settle();
+  assert.equal(panel.setup().disabled, true);
+  assert.ok(panel.find((props) => typeof props.children === 'string' && props.children.includes('not published on npm')));
+  assert.equal(panel.find((props) => props.children === 'Source manifest verified; project installation is not verified.'), null);
+});
+
 test('project setup is explicit, independent of npm, and clears copied or fallback requests on source changes', async (t) => {
   const copied = [];
   let clipboardFails = false;
@@ -372,7 +485,9 @@ test('project setup is explicit, independent of npm, and clears copied or fallba
   });
   t.after(() => panel.cleanup());
   await panel.settle();
-  assert.equal(panel.source().value, 'npm');
+  assert.equal(panel.source().value, 'github');
+  panel.source().onChange({ target: { value: 'npm' } });
+  await panel.settle();
   assert.equal(panel.setup().disabled, true, 'npm 404 cannot enable the public flow');
   assert.ok(panel.find((props) => props['data-testid'] === 'setup-package-status'));
   panel.source().onChange({ target: { value: 'project' } });
