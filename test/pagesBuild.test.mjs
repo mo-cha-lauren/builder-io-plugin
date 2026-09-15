@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
+import { OFFICIAL_SKILL_SOURCE } from '../src/officialSkillInstall.mjs';
 import { buildPages } from '../scripts/build-pages.mjs';
 import { createSkillBundle } from '../scripts/build-skill-bundle.mjs';
 import { createGithubSource, GITHUB_REPOSITORY, PAGES_ORIGIN } from '../scripts/build-github-source.mjs';
@@ -40,7 +41,7 @@ async function fixture(t) {
   await writeFile(path.join(project, '.generated/github-source.json'), JSON.stringify(source));
   await mkdir(path.join(project, 'dist'));
   // The unit boundary checks staging and pins, not execution of the real browser bundle.
-  const plugin = Buffer.from(`/* fixture manifest pin: ${source.manifestSha256} */\n`);
+  const plugin = Buffer.from(`/* fixture official source: ${OFFICIAL_SKILL_SOURCE.repository} ${OFFICIAL_SKILL_SOURCE.revision} */\n`);
   await writeFile(path.join(project, 'dist/plugin.system.js'), plugin);
   await writeFile(path.join(project, 'dist/plugin.system.js.LICENSE.txt'), 'Fixture dependency notice.\n');
   return { project, bundle, source, plugin };
@@ -76,61 +77,42 @@ async function createTestSymlink(t, target, linkPath, type) {
   }
 }
 
-test('Pages stages exactly the complete pinned Skill files and browser release assets', async (t) => {
-  const { project, bundle, source, plugin } = await fixture(t);
-  for (const relative of ['.git/config', '.env', 'node_modules/private.js', 'bin/server-installer.mjs', 'src/private.js', 'dist/unreviewed.txt']) {
+test('Pages publishes browser assets and official source metadata, never mirrored Skills or config', async (t) => {
+  const { project, bundle, plugin } = await fixture(t);
+  for (const relative of ['.git/config', '.env', 'node_modules/private.js', 'src/private.js', 'dist/unreviewed.txt']) {
     await mkdir(path.dirname(path.join(project, relative)), { recursive: true });
-    await writeFile(path.join(project, relative), 'Synthetic excluded fixture; never publish.\n');
+    await writeFile(path.join(project, relative), 'Synthetic excluded fixture.\n');
   }
   const result = await buildPages(project, { revision: REVISION });
   const prefix = `releases/${REVISION}/`;
-  const assets = bundle.skills.flatMap((skill) => skill.files);
-  assert.equal(assets.length, 24);
   const expectedFiles = [
     '.nojekyll', 'index.html', 'release.json', 'LICENSE', 'LEGAL.md',
     'plugin.system.js', 'plugin.system.js.LICENSE.txt',
-    `${prefix}plugin.system.js`, `${prefix}plugin.system.js.LICENSE.txt`, `${prefix}manifest.json`,
-    ...assets.map((asset) => `${prefix}${asset.path.replace(/^\.builder\//, '')}`),
+    prefix + 'plugin.system.js', prefix + 'plugin.system.js.LICENSE.txt',
   ].sort();
   assert.deepEqual(await listFiles(result.output), expectedFiles);
   assert.equal(result.stagedFiles, expectedFiles.length);
-  assert.equal(result.skillFiles, 24);
-  for (const asset of assets) {
-    const staged = await readFile(path.join(result.output, prefix, asset.path.replace(/^\.builder\//, '')));
-    assert.deepEqual(staged, Buffer.from(asset.content));
-    assert.equal(hash(staged), asset.sha256);
-  }
+  assert.equal(result.skillFiles, 0);
   assert.deepEqual(await readFile(path.join(result.output, 'plugin.system.js')), plugin);
   assert.deepEqual(await readFile(path.join(result.output, prefix, 'plugin.system.js')), plugin);
-  for (const relative of ['LICENSE', 'LEGAL.md']) {
-    assert.deepEqual(await readFile(path.join(result.output, relative)), await readFile(path.join(project, relative)));
-  }
-  const manifestBytes = await readFile(path.join(result.output, prefix, 'manifest.json'));
-  assert.deepEqual(JSON.parse(manifestBytes), source.manifest);
-  assert.equal(hash(manifestBytes), source.manifestSha256);
   const release = JSON.parse(await readFile(path.join(result.output, 'release.json'), 'utf8'));
   assert.deepEqual(release, {
     formatVersion: 1, repository: GITHUB_REPOSITORY, revision: REVISION,
-    pluginUrl: `${PAGES_ORIGIN}/plugin.system.js?pluginId=${encodeURIComponent(bundle.package.name)}`,
-    pluginSha256: hash(plugin), manifestUrl: `${source.baseUrl}manifest.json`,
-    manifestSha256: source.manifestSha256, skillFiles: 24,
+    pluginUrl: PAGES_ORIGIN + '/plugin.system.js?pluginId=' + encodeURIComponent(bundle.package.name),
+    pluginSha256: hash(plugin), officialSkillSource: OFFICIAL_SKILL_SOURCE, skillFiles: 0,
   });
-  for (const skill of source.manifest.skills) {
-    for (const entry of skill.files) {
-      const staged = await readFile(path.join(result.output, prefix, entry.path.replace(/^\.builder\//, '')));
-      assert.equal(staged.length, entry.bytes);
-      assert.equal(hash(staged), entry.sha256);
-      assert.equal(entry.url, `${source.baseUrl}${entry.path.replace(/^\.builder\//, '')}`);
-    }
-  }
   const html = await readFile(path.join(result.output, 'index.html'), 'utf8');
   assert.ok(html.includes(release.pluginUrl));
   assert.ok(html.includes(REVISION));
-  assert.match(html, /Builder cloud import.*require separate acceptance/);
-  assert.match(html, /Copy setup request.*Builder Agent chat.*start a new chat/);
+  assert.ok(html.includes(OFFICIAL_SKILL_SOURCE.repository));
+  assert.match(html, /Builder cloud installation.*require separate acceptance/);
+  assert.match(html, /Copy install prompt.*Builder Agent chat.*start a new chat/);
   assert.match(html, /custom\/private-plugin entitlement/);
   assert.match(html, /public GitHub repository is not an approved Builder public plugin/);
-  assert.doesNotMatch(html, /Installer source|GitHub \(no npm\)|Public npm|Project test package|Download Skill ZIP|Download config/);
+  assert.match(html, /There are no payment settings/);
+  assert.match(html, /currently offers only antom-integration/);
+  assert.doesNotMatch(html, /Bill analysis|antom-reconciliation-expert/);
+  assert.doesNotMatch(html, /review any payment settings|Download Skill ZIP|Download config|Copy setup request/);
 });
 
 test('Pages rejects a different build revision before creating output', async (t) => {
@@ -183,7 +165,7 @@ test('Pages rejects tampered generated source or Skill data and a mismatched plu
       } else {
         await writeFile(path.join(project, 'dist/plugin.system.js'), '/* wrong build */\n');
       }
-      await assert.rejects(buildPages(project, { revision: REVISION }), /Rebuild|matching GitHub manifest pin/);
+      await assert.rejects(buildPages(project, { revision: REVISION }), /Rebuild|matching official Skill source pin/);
       await assertNoOutput(project);
     });
   }

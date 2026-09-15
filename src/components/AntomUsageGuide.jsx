@@ -5,6 +5,7 @@ import Dialog from '@material-ui/core/Dialog';
 import DialogActions from '@material-ui/core/DialogActions';
 import DialogContent from '@material-ui/core/DialogContent';
 import DialogTitle from '@material-ui/core/DialogTitle';
+import { OFFICIAL_SKILL_SOURCE } from '../officialSkillInstall.mjs';
 
 /** Local help stays available without opening an external documentation site. */
 const AntomUsageGuide = ({ open, onClose }) => (
@@ -12,12 +13,12 @@ const AntomUsageGuide = ({ open, onClose }) => (
     PaperProps={{ style: { margin: 16, width: 'calc(100% - 32px)', maxHeight: 'calc(100% - 32px)' } }}>
     <DialogTitle id="antom-usage-guide-title">Usage guide</DialogTitle>
     <DialogContent dividers css={{ fontSize: '13px', lineHeight: 1.5, overflowWrap: 'anywhere', '& p': { margin: '0 0 14px' }, '& p:last-child': { marginBottom: 0 } }}>
-      <p><strong>Setup in Builder.</strong> Select Skills and review payment settings, click Copy setup request, then paste it in the current Builder Agent chat. The Agent imports complete files from the pinned GitHub source and merges non-secret configuration into .env.example. Bill-only setup leaves payment configuration untouched.</p>
-      <p><strong>Verify setup.</strong> The plugin checks the source manifest first and verifies every selected file before copying the request. The Agent must use permitted native web and file tools, stop on denied access, truncated content or file conflicts, and never run install commands or change ACL settings. Source verification does not verify destination files. Read back the written files and report any checks that could not be completed. Copying a request does not install Skills.</p>
-      <p><strong>Start a new chat.</strong> After setup checks pass, open a new Builder chat and paste an example for your selected Skill.</p>
-      <p><strong>Server Secrets.</strong> Add API Keys and merchant private keys in your server environment or secret manager. Never put them in plugin settings or Agent chat.</p>
-      <p><strong>Notify uses RSA.</strong> All notify-related interfaces use RSA, including in API Key mode. Configure the Antom public key and required RSA references.</p>
-      <p><strong>Bill analysis.</strong> Supply sanitized bills only. Python and separate dependencies are required. Online report downloads and live transaction queries are outside this plugin's supported flow. Public knowledge may be fetched online.</p>
+      <p><strong>Install.</strong> This plugin currently offers only antom-integration. Select Payment integration, copy the install prompt and paste it in the current Builder Agent. The Agent retrieves complete original files from ant-intl/antom-ai-tools at a fixed commit, then writes them using native project file tools. Your project does not need to be connected to GitHub.</p>
+      <p><strong>Destination.</strong> Reuse {OFFICIAL_SKILL_SOURCE.targetDirectory} if it exists; otherwise the Agent creates it. Each Skill keeps its own directory and original supporting files. Preserve unrelated Skills. If same-named Skill files already exist, stop and report them without overwriting.</p>
+      <p><strong>Requirements.</strong> The Agent needs permitted source-reading and project file tools. This flow uses no terminal installer or runtime-version checks. Obtain the full source file list and raw contents before writing; HTML wrappers, summaries and incomplete responses are not source files. Stop on denied operations without changing ACL policies.</p>
+      <p><strong>Verify.</strong> Read back the destination files and compare their paths and contents with the retrieved source. Report retrieval, writes and comparison separately. If a write fails, report any files already written. An unsupported comparison is unverified, not success. No lock file is created or changed.</p>
+      <p><strong>Use.</strong> After the Agent verifies the installed files, start a new chat and paste the selected Skill example. Copying a prompt does not install or verify anything. Review security warnings before use.</p>
+      <p><strong>Scope.</strong> This plugin does not configure payment credentials, modify environment files or process payments itself. Configure real credentials separately in your project's server-side Secrets, never in plugin settings or chat.</p>
     </DialogContent>
     <DialogActions>
       <Button type="button" onClick={onClose} color="primary" style={{ textTransform: 'none' }}>Done</Button>
