@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const copiedPaths = Object.freeze([
-  'bin/antom-builder.mjs', 'bin/setup-project.mjs', 'lib/project-installer.mjs', 'src/antomSettings.mjs', 'LICENSE', 'LEGAL.md',
+  'bin/antom-builder.mjs', 'bin/setup-project.mjs', 'lib/project-installer.mjs', 'src/antomSettings.mjs', 'LICENSE',
 ]);
 const artifactPaths = [...copiedPaths, 'dist/skill-bundle.json', 'package.json'].sort();
 

@@ -95,7 +95,7 @@ export const PROJECT_SETUP_COMMANDS = Object.freeze([
 ]);
 
 const PROJECT_INSTALLER_FILES = Object.freeze([
-  'LEGAL.md', 'LICENSE', 'bin/antom-builder.mjs', 'bin/setup-project.mjs', 'dist/skill-bundle.json',
+  'LICENSE', 'bin/antom-builder.mjs', 'bin/setup-project.mjs', 'dist/skill-bundle.json',
   'lib/project-installer.mjs', 'package.json', 'src/antomSettings.mjs',
 ]);
 

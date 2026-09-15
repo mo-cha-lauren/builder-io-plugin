@@ -15,8 +15,7 @@
     "dist",
     "bin",
     "lib",
-    "src/antomSettings.mjs",
-    "LEGAL.md"
+    "src/antomSettings.mjs"
   ],
   "scripts": {
     "predev": "npm run build:skills",
@@ -30,6 +29,7 @@
     "check:antom-skill-drift": "node scripts/check-antom-skill-drift.mjs",
     "test": "npm run check:antom-skill && npm run build && node --test",
     "test:package": "node scripts/package-install-smoke.mjs",
+    "test:legacy-official-install": "node scripts/official-install-smoke.mjs",
     "test:reconciliation": "python3 -B test/reconciliation-smoke.py",
     "prepack": "npm test"
   },

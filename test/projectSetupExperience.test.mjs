@@ -71,9 +71,9 @@ async function assertSetupUntouched(project) {
   assert.ok(!(await readdir(project)).includes('.builder'));
 }
 
-test('project test artifact contains only eight reviewed runtime files with reproducible hashes', async () => {
+test('project test artifact contains only seven reviewed runtime files with reproducible hashes', async () => {
   assert.deepEqual(artifact.files.map((file) => file.path).sort(), [
-    'LEGAL.md', 'LICENSE', 'bin/antom-builder.mjs', 'bin/setup-project.mjs', 'dist/skill-bundle.json',
+    'LICENSE', 'bin/antom-builder.mjs', 'bin/setup-project.mjs', 'dist/skill-bundle.json',
     'lib/project-installer.mjs', 'package.json', 'src/antomSettings.mjs',
   ].sort());
   const metadata = JSON.parse(artifact.files.find((file) => file.path === 'package.json').content);
@@ -233,7 +233,7 @@ for (const api of [fs, fsp]) for (const base of ['access','open','readFile','wri
   const prompt = await createProjectSetupPrompt(pkg, ['integration'], settings, artifact.manifest);
   const result = await executePrompt(prompt, project, { env: { NODE_OPTIONS: `--import=data:text/javascript,${encodeURIComponent(guard)}` } });
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /Verified all 8 pinned test installer files/);
+  assert.match(result.stdout, /Verified all 7 pinned test installer files/);
   assert.match(result.stdout, /Installed 5 skill file\(s\)/);
   assert.equal(await readFile(path.join(project, integrationSkill), 'utf8'),
     bundle.skills.find((skill) => skill.id === 'integration').files.find((file) => file.path === integrationSkill).content);

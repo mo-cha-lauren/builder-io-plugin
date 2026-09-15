@@ -38,7 +38,7 @@ async function fixture(t, skills = ['integration'], sourceOverrides = {}) {
     source = await mkdtemp(path.join(await realpath(tmpdir()), 'antom-fixed-reviewed-source-'));
     t.after(() => rm(source, { recursive: true, force: true }));
     for (const relative of [
-      'package.json', 'LEGAL.md', 'LICENSE', 'bin/antom-builder.mjs', 'bin/setup-project.mjs',
+      'package.json', 'LICENSE', 'bin/antom-builder.mjs', 'bin/setup-project.mjs',
       'lib/project-installer.mjs', 'src/antomSettings.mjs',
     ]) {
       const destination = path.join(source, relative);
@@ -78,12 +78,12 @@ async function noSetup(root, result, { verified = false } = {}) {
   await assert.rejects(readFile(path.join(root, '.builder/skills/antom-reconciliation-expert/SKILL.md')), { code: 'ENOENT' });
 }
 
-test('fixed entry verifies 8 files, installs integration and preserves real .env', async (t) => {
+test('fixed entry verifies 7 files, installs integration and preserves real .env', async (t) => {
   const { root, request } = await fixture(t);
   await writeFile(path.join(root, '.env'), 'REAL_SERVER_SECRET=never-print-me\n');
   const first = run(root);
   assert.equal(first.status, 0, first.stderr);
-  assert.match(first.stdout, /Verified all 8 pinned test installer files/);
+  assert.match(first.stdout, /Verified all 7 pinned test installer files/);
   assert.match(first.stdout, /Installed 1 skill file/);
   assert.equal(await readFile(path.join(root, '.builder/skills/antom-integration/SKILL.md'), 'utf8'), content);
   const env = await readFile(path.join(root, '.env.example'), 'utf8');
@@ -168,9 +168,9 @@ test('setup manifest rejects unsupported identities, paths, versions and hash re
   await noSetup(root, run(root));
 });
 
-test('tampering any of all 8 pinned files stops before the CLI runs', async (t) => {
+test('tampering any of all 7 pinned files stops before the CLI runs', async (t) => {
   const { root, artifact } = await fixture(t);
-  assert.equal(artifact.files.length, 8);
+  assert.equal(artifact.files.length, 7);
   for (const file of artifact.files) {
     const target = path.join(root, 'tools/antom-builder', file.path);
     // A harmless comment also keeps the entry executable so its manifest check
@@ -191,7 +191,7 @@ test('request input rejects oversize, invalid UTF-8 and malformed JSON without e
 });
 
 test('request and runtime inputs reject hardlinks and directories', async (t) => {
-  for (const relative of ['antom.setup.json', 'tools/antom-builder/LEGAL.md']) {
+  for (const relative of ['antom.setup.json', 'tools/antom-builder/LICENSE']) {
     const { root } = await fixture(t);
     const target = path.join(root, relative);
     const saved = await readFile(target);
@@ -208,7 +208,7 @@ test('request and runtime inputs reject hardlinks and directories', async (t) =>
 });
 
 test('request, entry, runtime file and runtime directories reject symlinks', async (t) => {
-  for (const relative of ['antom.setup.json', ENTRY, 'tools/antom-builder/LEGAL.md', 'tools/antom-builder/lib']) {
+  for (const relative of ['antom.setup.json', ENTRY, 'tools/antom-builder/LICENSE', 'tools/antom-builder/lib']) {
     const { root } = await fixture(t);
     const target = path.join(root, relative);
     const isDirectory = relative.endsWith('/lib');
@@ -231,7 +231,7 @@ test('request, entry, runtime file and runtime directories reject symlinks', asy
 });
 
 test('FIFO request and runtime inputs fail promptly without reading them', { skip: process.platform === 'win32' }, async (t) => {
-  for (const relative of ['antom.setup.json', 'tools/antom-builder/LEGAL.md']) {
+  for (const relative of ['antom.setup.json', 'tools/antom-builder/LICENSE']) {
     const { root } = await fixture(t);
     const target = path.join(root, relative);
     await rm(target);
@@ -243,11 +243,11 @@ test('FIFO request and runtime inputs fail promptly without reading them', { ski
 
 test('runtime size limit and rehashed package identity mismatch fail before CLI', async (t) => {
   const { root, request } = await fixture(t);
-  const legalPath = path.join(root, 'tools/antom-builder/LEGAL.md');
-  const legal = await readFile(legalPath);
-  await writeFile(legalPath, Buffer.alloc(8 * 1024 * 1024 + 1, 32));
+  const licensePath = path.join(root, 'tools/antom-builder/LICENSE');
+  const license = await readFile(licensePath);
+  await writeFile(licensePath, Buffer.alloc(8 * 1024 * 1024 + 1, 32));
   await noSetup(root, run(root));
-  await writeFile(legalPath, legal);
+  await writeFile(licensePath, license);
   const pkg = JSON.stringify({ name: 'not-the-expected-package', version: request.installer.version });
   await writeFile(path.join(root, 'tools/antom-builder/package.json'), pkg);
   request.installer.files.find((file) => file.path === 'package.json').sha256 = sha256(pkg);
@@ -267,7 +267,7 @@ test('verified CLI value-validation and conflict failures preserve status and ex
   await writeFile(existing, 'User-owned conflicting Skill.\n');
   const conflict = run(root);
   assert.equal(conflict.status, 1);
-  assert.match(conflict.stdout, /Verified all 8/);
+  assert.match(conflict.stdout, /Verified all 7/);
   assert.match(conflict.stderr, /No files were written/);
   assert.equal(await readFile(existing, 'utf8'), 'User-owned conflicting Skill.\n');
   await assert.rejects(readFile(path.join(root, '.env.example')), { code: 'ENOENT' });

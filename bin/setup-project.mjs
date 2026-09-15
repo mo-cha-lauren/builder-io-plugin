@@ -13,7 +13,7 @@ const REQUEST_PATH = 'antom.setup.json';
 const INSTALLER_DIRECTORY = 'tools/antom-builder';
 const ENTRY_PATH = 'bin/setup-project.mjs';
 const RUNTIME_FILES = Object.freeze([
-  'LEGAL.md', 'LICENSE', 'bin/antom-builder.mjs', ENTRY_PATH,
+  'LICENSE', 'bin/antom-builder.mjs', ENTRY_PATH,
   'dist/skill-bundle.json', 'lib/project-installer.mjs', 'package.json', 'src/antomSettings.mjs',
 ]);
 const MAX_REQUEST_BYTES = 64 * 1024;
