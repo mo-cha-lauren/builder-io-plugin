@@ -172,7 +172,7 @@ test('production entry, license and README package installation exist', async ()
   assert.ok((await stat(bundlePath)).isFile());
   assert.ok((await stat(path.join(root, 'LICENSE'))).isFile());
   const readme = await readFile(path.join(root, 'README.md'), 'utf8');
-  assert.ok(readme.includes('```text\n' + pkg.name + '\n```'));
+  assert.ok(readme.replace(/\r\n/g, '\n').includes('```text\n' + pkg.name + '\n```'));
 });
 
 test('SystemJS registers only the plugin and tab; no settings or lifecycle popup', async () => {
