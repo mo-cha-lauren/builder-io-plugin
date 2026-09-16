@@ -1,5 +1,5 @@
 {
-  "name": "@antglobal/builder-io-plugin-antom-payment",
+  "name": "@builder.io/plugin-antom-payment",
   "version": "1.0.0",
   "description": "Antom Payment Integration Plugin for Builder.io",
   "entry": "plugin",

@@ -25,7 +25,7 @@ export async function buildPages(projectRoot, { revision, output = '.pages' }) {
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(output) && output !== '.pages') throw new Error('Use a dedicated Pages output directory name.');
   if (['node_modules', 'dist', 'src', 'bin', 'lib', 'test', 'scripts', 'vendor', 'docs'].includes(output)) throw new Error('Output cannot replace a project directory.');
   const pkg = JSON.parse((await readRegular(projectRoot, 'package.json')).toString('utf8'));
-  if (pkg.name !== '@antglobal/builder-io-plugin-antom-payment') throw new Error('Unexpected plugin package.');
+  if (pkg.name !== '@builder.io/plugin-antom-payment') throw new Error('Unexpected plugin package.');
   const plugin = await readRegular(projectRoot, 'dist/plugin.system.js');
   const generated = JSON.parse((await readRegular(projectRoot, 'dist/build-metadata.json')).toString('utf8'));
   if (JSON.stringify(createBuildMetadata(plugin, revision)) !== JSON.stringify(generated)) throw new Error('Rebuild the plugin at the Pages revision before publishing.');

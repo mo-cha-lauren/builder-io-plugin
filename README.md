@@ -17,7 +17,7 @@ not offered.
 3. Enter the plugin package name below, click **Save**, and reload Builder.
 
 ```text
-@antglobal/builder-io-plugin-antom-payment
+@builder.io/plugin-antom-payment
 ```
 
 ![Builder.io plugin installation settings](./docs/media/builder-installation.png)
