@@ -7,18 +7,13 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { OFFICIAL_SKILL_SOURCE } from '../src/officialSkillInstall.mjs';
 import { buildPages } from '../scripts/build-pages.mjs';
-import { createSkillBundle } from '../scripts/build-skill-bundle.mjs';
-import { createGithubSource, GITHUB_REPOSITORY, PAGES_ORIGIN } from '../scripts/build-github-source.mjs';
+import { createBuildMetadata, GITHUB_REPOSITORY, PAGES_ORIGIN } from '../scripts/build-metadata.mjs';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
 const REVISION = '1234567890abcdef1234567890abcdef12345678';
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const fixtureInputs = [
   'package.json', 'LICENSE',
-  '.builder/skills/antom-integration',
-  'vendor/antom-reconciliation-expert',
-  'vendor/antom-reconciliation-source.json',
-  'adapters/reconciliation/BUILDER_ADDENDUM.md',
 ];
 
 async function temporaryDirectory(t) {
@@ -34,17 +29,14 @@ async function fixture(t) {
     await mkdir(path.dirname(destination), { recursive: true });
     await cp(path.join(repository, relative), destination, { recursive: true });
   }
-  const bundle = await createSkillBundle(project);
-  const source = createGithubSource(bundle, REVISION);
-  await mkdir(path.join(project, '.generated'));
-  await writeFile(path.join(project, '.generated/skill-bundle.json'), JSON.stringify(bundle));
-  await writeFile(path.join(project, '.generated/github-source.json'), JSON.stringify(source));
   await mkdir(path.join(project, 'dist'));
   // The unit boundary checks staging and pins, not execution of the real browser bundle.
   const plugin = Buffer.from(`/* fixture official source: ${OFFICIAL_SKILL_SOURCE.repository} ${OFFICIAL_SKILL_SOURCE.revision} */\n`);
   await writeFile(path.join(project, 'dist/plugin.system.js'), plugin);
+  const metadata = createBuildMetadata(plugin, REVISION);
+  await writeFile(path.join(project, 'dist/build-metadata.json'), JSON.stringify(metadata));
   await writeFile(path.join(project, 'dist/plugin.system.js.LICENSE.txt'), 'Fixture dependency notice.\n');
-  return { project, bundle, source, plugin };
+  return { project, metadata, plugin };
 }
 
 async function listFiles(directory, prefix = '') {
@@ -78,7 +70,8 @@ async function createTestSymlink(t, target, linkPath, type) {
 }
 
 test('Pages publishes browser assets and official source metadata, never mirrored Skills or config', async (t) => {
-  const { project, bundle, plugin } = await fixture(t);
+  const { project, plugin } = await fixture(t);
+  const pkg = JSON.parse(await readFile(path.join(project, 'package.json'), 'utf8'));
   for (const relative of ['.git/config', '.env', 'node_modules/private.js', 'src/private.js', 'dist/unreviewed.txt']) {
     await mkdir(path.dirname(path.join(project, relative)), { recursive: true });
     await writeFile(path.join(project, relative), 'Synthetic excluded fixture.\n');
@@ -95,10 +88,14 @@ test('Pages publishes browser assets and official source metadata, never mirrore
   assert.equal(result.skillFiles, 0);
   assert.deepEqual(await readFile(path.join(result.output, 'plugin.system.js')), plugin);
   assert.deepEqual(await readFile(path.join(result.output, prefix, 'plugin.system.js')), plugin);
+  for (const relative of ['plugin.system.js.LICENSE.txt', prefix + 'plugin.system.js.LICENSE.txt']) {
+    assert.deepEqual(await readFile(path.join(result.output, relative)),
+      await readFile(path.join(project, 'dist/plugin.system.js.LICENSE.txt')));
+  }
   const release = JSON.parse(await readFile(path.join(result.output, 'release.json'), 'utf8'));
   assert.deepEqual(release, {
     formatVersion: 1, repository: GITHUB_REPOSITORY, revision: REVISION,
-    pluginUrl: PAGES_ORIGIN + '/plugin.system.js?pluginId=' + encodeURIComponent(bundle.package.name),
+    pluginUrl: PAGES_ORIGIN + '/plugin.system.js?pluginId=' + encodeURIComponent(pkg.name),
     pluginSha256: hash(plugin), officialSkillSource: OFFICIAL_SKILL_SOURCE, skillFiles: 0,
   });
   const html = await readFile(path.join(result.output, 'index.html'), 'utf8');
@@ -152,18 +149,19 @@ test('Pages accepts an empty dedicated output directory', async (t) => {
   assert.ok((await readdir(result.output)).includes('release.json'));
 });
 
-test('Pages rejects tampered generated source or Skill data and a mismatched plugin pin', async (t) => {
-  for (const kind of ['source', 'bundle', 'plugin']) {
+test('Pages rejects tampered build metadata, bundle bytes and an incorrect official pin', async (t) => {
+  for (const kind of ['metadata', 'plugin', 'pin']) {
     await t.test(kind, async (st) => {
-      const { project, source, bundle } = await fixture(st);
-      if (kind === 'source') {
-        source.manifestSha256 = '0'.repeat(64);
-        await writeFile(path.join(project, '.generated/github-source.json'), JSON.stringify(source));
-      } else if (kind === 'bundle') {
-        bundle.skills[0].files[0].content += 'Tampered generated text.\n';
-        await writeFile(path.join(project, '.generated/skill-bundle.json'), JSON.stringify(bundle));
+      const { project, metadata } = await fixture(st);
+      if (kind === 'metadata') {
+        metadata.pluginSha256 = '0'.repeat(64);
+        await writeFile(path.join(project, 'dist/build-metadata.json'), JSON.stringify(metadata));
       } else {
-        await writeFile(path.join(project, 'dist/plugin.system.js'), '/* wrong build */\n');
+        const wrongPlugin = Buffer.from('/* wrong build */\n');
+        await writeFile(path.join(project, 'dist/plugin.system.js'), wrongPlugin);
+        if (kind === 'pin') {
+          await writeFile(path.join(project, 'dist/build-metadata.json'), JSON.stringify(createBuildMetadata(wrongPlugin, REVISION)));
+        }
       }
       await assert.rejects(buildPages(project, { revision: REVISION }), /Rebuild|matching official Skill source pin/);
       await assertNoOutput(project);

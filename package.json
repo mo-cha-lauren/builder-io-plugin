@@ -5,32 +5,19 @@
   "entry": "plugin",
   "output": "plugin.system.js",
   "main": "dist/plugin.system.js",
-  "bin": {
-    "antom-builder": "bin/antom-builder.mjs"
-  },
-  "antomBuilder": {
-    "setupProtocol": 1
-  },
   "files": [
-    "dist",
-    "bin",
-    "lib",
-    "src/antomSettings.mjs"
+    "dist/plugin.system.js",
+    "dist/plugin.system.js.LICENSE.txt",
+    "docs/media/builder-installation.png",
+    "docs/media/antom-integration-demo.gif"
   ],
   "scripts": {
-    "predev": "npm run build:skills",
-    "prestart": "npm run build:skills",
     "dev": "cross-env BABEL_ENV=development webpack-dev-server --mode development",
-    "build:skills": "node scripts/build-skill-bundle.mjs",
-    "build": "npm run build:skills && cross-env BABEL_ENV=production webpack --mode production",
+    "build": "cross-env BABEL_ENV=production webpack --mode production && node scripts/build-metadata.mjs",
     "start": "cross-env BABEL_ENV=development webpack-dev-server --mode development",
-    "sync:antom-skill": "node scripts/sync-antom-skill.mjs",
-    "check:antom-skill": "node scripts/sync-antom-skill.mjs --check",
     "check:antom-skill-drift": "node scripts/check-antom-skill-drift.mjs",
-    "test": "npm run check:antom-skill && npm run build && node --test",
+    "test": "npm run build && node --test",
     "test:package": "node scripts/package-install-smoke.mjs",
-    "test:legacy-official-install": "node scripts/official-install-smoke.mjs",
-    "test:reconciliation": "python3 -B test/reconciliation-smoke.py",
     "prepack": "npm test"
   },
   "keywords": [
@@ -69,9 +56,9 @@
     "@material-ui/core": "^4.12.4",
     "babel-loader": "^8.2.5",
     "cross-env": "^7.0.3",
-    "fflate": "0.8.3",
     "webpack": "^5.74.0",
     "webpack-cli": "^5.1.4",
-    "webpack-dev-server": "^5.2.4"
+    "webpack-dev-server": "^5.2.4",
+    "yaml": "1.10.3"
   }
 }

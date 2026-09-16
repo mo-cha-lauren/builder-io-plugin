@@ -2,9 +2,7 @@ import { createHash } from 'node:crypto';
 import { lstat, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createSkillBundle } from './build-skill-bundle.mjs';
-import { createGithubSource, GITHUB_REPOSITORY, PAGES_ORIGIN } from './build-github-source.mjs';
-import { validateGithubSource } from '../src/githubInstall.mjs';
+import { createBuildMetadata, GITHUB_REPOSITORY, PAGES_ORIGIN } from './build-metadata.mjs';
 import { OFFICIAL_SKILL_SOURCE } from '../src/officialSkillInstall.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -26,21 +24,16 @@ export async function buildPages(projectRoot, { revision, output = '.pages' }) {
   if (!/^[a-f0-9]{40}$/.test(revision)) throw new Error('Pages requires a complete commit SHA.');
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(output) && output !== '.pages') throw new Error('Use a dedicated Pages output directory name.');
   if (['node_modules', 'dist', 'src', 'bin', 'lib', 'test', 'scripts', 'vendor', 'docs'].includes(output)) throw new Error('Output cannot replace a project directory.');
-  const bundle = await createSkillBundle(projectRoot);
-  const source = createGithubSource(bundle, revision);
-  validateGithubSource(source, bundle.package);
-  const generated = JSON.parse((await readRegular(projectRoot, '.generated/github-source.json')).toString('utf8'));
-  if (JSON.stringify(source) !== JSON.stringify(generated)) throw new Error('Rebuild the plugin at the Pages revision before publishing.');
-  const bundleJson = JSON.parse((await readRegular(projectRoot, '.generated/skill-bundle.json')).toString('utf8'));
-  if (JSON.stringify(bundle) !== JSON.stringify(bundleJson)) throw new Error('Rebuild the reviewed Skill data before publishing.');
+  const pkg = JSON.parse((await readRegular(projectRoot, 'package.json')).toString('utf8'));
+  if (pkg.name !== '@antglobal/builder-io-plugin-antom-payment') throw new Error('Unexpected plugin package.');
   const plugin = await readRegular(projectRoot, 'dist/plugin.system.js');
+  const generated = JSON.parse((await readRegular(projectRoot, 'dist/build-metadata.json')).toString('utf8'));
+  if (JSON.stringify(createBuildMetadata(plugin, revision)) !== JSON.stringify(generated)) throw new Error('Rebuild the plugin at the Pages revision before publishing.');
   if (!plugin.includes(Buffer.from(OFFICIAL_SKILL_SOURCE.revision)) || !plugin.includes(Buffer.from(OFFICIAL_SKILL_SOURCE.repository))) {
     throw new Error('Plugin does not contain the matching official Skill source pin.');
   }
   const notices = await readRegular(projectRoot, 'dist/plugin.system.js.LICENSE.txt');
   const license = await readRegular(projectRoot, 'LICENSE');
-  const manifestText = `${JSON.stringify(source.manifest, null, 2)}\n`;
-  if (hash(manifestText) !== source.manifestSha256) throw new Error('Manifest pin mismatch.');
   const prefix = `releases/${revision}/`;
   const files = new Map([
     ['plugin.system.js', plugin], ['plugin.system.js.LICENSE.txt', notices],
@@ -48,7 +41,7 @@ export async function buildPages(projectRoot, { revision, output = '.pages' }) {
     ['LICENSE', license],
     ['.nojekyll', Buffer.from('')],
   ]);
-  const pluginUrl = `${PAGES_ORIGIN}/plugin.system.js?pluginId=${encodeURIComponent(bundle.package.name)}`;
+  const pluginUrl = `${PAGES_ORIGIN}/plugin.system.js?pluginId=${encodeURIComponent(pkg.name)}`;
   const release = {
     formatVersion: 1, repository: GITHUB_REPOSITORY, revision, pluginUrl,
     pluginSha256: hash(plugin), officialSkillSource: OFFICIAL_SKILL_SOURCE,

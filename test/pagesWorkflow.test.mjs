@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
-// The YAML parser is already provided by the locked build dependencies.
+// Keep the workflow parser an explicit, locked test dependency.
 const { parse } = require('yaml');
 const text = await readFile(new URL('../.github/workflows/pages.yml', import.meta.url), 'utf8');
 const workflow = parse(text);
